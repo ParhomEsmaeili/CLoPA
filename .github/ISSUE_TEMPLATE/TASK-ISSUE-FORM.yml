@@ -8,7 +8,7 @@ body:
     id: short-description
     attributes:
       label: Description
-      placeholder: ex. We need to request a connection be set up between Sectra PACS and XNAT
+      placeholder: ex. We need to deploy the repository for the submission. 
     validations:
       required: true
   - type: textarea
@@ -16,7 +16,7 @@ body:
     attributes:
       label: Acceptance criteria
       description: What are one or more acceptance criteria that would be used to verify this task is completed?
-      placeholder: ex. We are able to ping Sectra PACS from XNAT, and vice versa
+      placeholder: ex. The repository and all relevant files are packaged together and submitted.
     validations:
       required: true
   - type: textarea
@@ -24,7 +24,7 @@ body:
     attributes:
       label: Prerequisites
       description: Are there any prerequisites for completing this task?
-      placeholder: ex. A Trust email address to access the IT Service Centre system
+      placeholder: ex. Cloud service for saving model checkpoints/hugging face. 
     validations:
       required: false
   - type: textarea
@@ -32,7 +32,7 @@ body:
     attributes:
       label: Known or potential blockers
       description: Are there any known or potential blockers to completing this task?
-      placeholder: ex. The Network Team are currently at capacity and may be unable to complete the task in the usual timeframe
+      placeholder: ex. N/A
     validations:
       required: false
   - type: checkboxes

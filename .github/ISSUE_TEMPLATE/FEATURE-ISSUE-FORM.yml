@@ -9,7 +9,7 @@ body:
     id: short-description
     attributes:
       label: Description
-      placeholder: ex. There should be an API endpoint for DICOM retrieval from a PACS to XNAT
+      placeholder: ex. The algorithm needs to be capable of transitioning between the few-shot and many-shot regimes for automated segmentation.
     validations:
       required: true
   - type: textarea
@@ -17,7 +17,7 @@ body:
     attributes:
       label: Acceptance criteria
       description: What are one or more acceptance criteria that would be used to verify this feature is working as expected?
-      placeholder: ex. The endpoint supports retrieval based either accession numbers or study instance UIDs
+      placeholder: ex. The algorithm has demonstrated the capability to transition to automated segmentation across a variety of permutations in the data samples (i.e. robustness)
     validations:
       required: true
   - type: textarea
@@ -25,7 +25,7 @@ body:
     attributes:
       label: Technical considerations
       description: Are there any technical considerations for this feature?
-      placeholder: ex. This feature will require a new API endpoint, additional logging, and existing API endpoints will need to be updated
+      placeholder: ex. This feature will require a meta-algorithm which can adapt to the underlying segmentation task type and data fingerprints.
     validations:
       required: false
   - type: checkboxes

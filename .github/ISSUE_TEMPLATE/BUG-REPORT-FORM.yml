@@ -9,7 +9,7 @@ body:
     id: short-description
     attributes:
       label: Description
-      placeholder: ex. The Central Hub database is not being updated with active projects' FL training progress
+      placeholder: ex. Nans are being generated during training. 
     validations:
       required: true
   - type: textarea
@@ -25,7 +25,7 @@ body:
     attributes:
       label: Acceptance criteria
       description: What are one or more acceptance criteria that would be used to verify this bug has been fixed?
-      placeholder: ex. Each project's FL training status is updated every 24 hours in the relevant Central Hub database table
+      placeholder: ex. The training process completes without generating nans across all known formulations of the problem.
     validations:
       required: true
   - type: checkboxes
