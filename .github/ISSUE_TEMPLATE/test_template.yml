@@ -1,0 +1,7 @@
+name: Test Template
+description: Testing templates
+title: "Test: "
+body:
+  - type: textarea
+    attributes:
+      label: Description

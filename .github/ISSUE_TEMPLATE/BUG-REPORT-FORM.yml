@@ -1,0 +1,37 @@
+name: Bug
+description: Raise a bug report
+title: "[Bug]: "
+labels: ["bug"]
+# type: Bug
+projects: ["5"]
+body:
+  - type: input
+    id: short-description
+    attributes:
+      label: Description
+      placeholder: ex. The Central Hub database is not being updated with active projects' FL training progress
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output or error messages
+      description: Please copy and paste any relevant log output or error messages, which will be automatically formatted into a codeblock.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: What are one or more acceptance criteria that would be used to verify this bug has been fixed?
+      placeholder: ex. Each project's FL training status is updated every 24 hours in the relevant Central Hub database table
+    validations:
+      required: true
+  - type: checkboxes
+    id: project-admin
+    attributes:
+      label: Assign the relevant label(s) and, if known, Milestone to this bug report
+      options:
+        - label: I confirm I have assigned the relevant label(s) and, if known, Milestone to this bug report
+          required: true

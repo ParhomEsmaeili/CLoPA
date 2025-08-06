@@ -1,0 +1,44 @@
+name: Task
+description: Raise a non-code task
+title: "[Task]: "
+# type: Task
+projects: ["5"]
+body:
+  - type: input
+    id: short-description
+    attributes:
+      label: Description
+      placeholder: ex. We need to request a connection be set up between Sectra PACS and XNAT
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: What are one or more acceptance criteria that would be used to verify this task is completed?
+      placeholder: ex. We are able to ping Sectra PACS from XNAT, and vice versa
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Are there any prerequisites for completing this task?
+      placeholder: ex. A Trust email address to access the IT Service Centre system
+    validations:
+      required: false
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Known or potential blockers
+      description: Are there any known or potential blockers to completing this task?
+      placeholder: ex. The Network Team are currently at capacity and may be unable to complete the task in the usual timeframe
+    validations:
+      required: false
+  - type: checkboxes
+    id: project-admin
+    attributes:
+      label: Assign the relevant label(s) and, if known, Milestone to this task
+      options:
+        - label: I confirm I have assigned the relevant label(s) and, if known, Milestone to this task
+          required: true
