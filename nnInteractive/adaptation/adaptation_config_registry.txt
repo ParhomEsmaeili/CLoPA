@@ -1,0 +1,32 @@
+{
+	"adapt_prototype_1":{
+		"adaptation_planner":
+			{
+				"planner_registry_name": "Prototype_Static_Planner",
+				"planner_config": {
+                }	
+			},
+		"adaptation_trigger_config": 
+			{
+				"criterion_config":{
+				"name": "static_raw_interval",
+				"adaptation_raw_interval": 1
+				},
+				"data_splitting_config": {
+				"name": "static_hold_out",
+				"fraction_train": 0.5
+				}
+			},
+		"data_handling_config":{
+				"dataset_constructor_config": {
+					"dataset_constructor":"ContinualPersistentDataset"
+				},
+				"io_operations_config": {
+					"compress":false,
+					"invert_orient":false,
+					"monai_reader": true,
+					"file_ext": ".nii.gz"
+				}
+		}
+	}
+}
