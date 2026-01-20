@@ -14,7 +14,7 @@
 				},
 				"data_splitting_config": {
 				"name": "static_hold_out",
-				"fraction_train": 0.5
+				"fraction_train": 0.8
 				}
 			},
 		"data_handling_config":{

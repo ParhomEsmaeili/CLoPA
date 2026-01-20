@@ -9,6 +9,7 @@ characteristics etc.
 import os
 import sys
 import numpy as np
+import torch 
 from monai.utils.enums import PostFix
 DEFAULT_POST_FIX = PostFix.meta()
 # app_local_path = os.path.abspath(os.path.dirname(os.path.dirname((os.path.dirname(__file__)))))
@@ -206,7 +207,7 @@ class Prototype_Static_Planner:
                 'LoadImaged': {
                     'keys': ['image', 'label'],
                     'reader': 'ITKReader',
-                    'dtype': np.float32,
+                    'dtype': torch.float32,
                     'meta_keys': None,
                     'meta_key_postfix': DEFAULT_POST_FIX,
                     'overwriting': False,
@@ -224,10 +225,16 @@ class Prototype_Static_Planner:
                     'strict_check': False,
                     'allow_missing_keys': False,
                     'channel_dim': None
-                    }
+                    },
+                'ToDeviced': {
+                    'keys': ['image', 'label'],
+                    'device': 'cuda',
+                    'non_blocking': True,
+                    'allow_missing_keys': False,
+                    'lazy': False,
+                    },     
             },
             'dynamic_transforms':{
-                # TODO: Uncomment and add the rest of the transforms. 
                 'RandCropByPosNegLabeld': {
                     'keys': ['image', 'label'],
                     'label_key': 'label',
@@ -243,6 +250,13 @@ class Prototype_Static_Planner:
                     'fg_indices_key': None,
                     'bg_indices_key': None,
                     },
+                'NormalizeIntensityd': {
+                    'keys': ['image', 'label'],
+                    'subtrahend': None,
+                    'divisor': None,
+                    'channel_wise': False,
+                    'dtype': torch.float32
+                },      
                 'DivisiblePadd': {
                     'keys': ['image', 'label'],
                     'k': 192,
@@ -287,7 +301,7 @@ class Prototype_Static_Planner:
                 'LoadImaged': {
                     'keys': ['image', 'label'],
                     'reader': 'ITKReader',
-                    'dtype': np.float32,
+                    'dtype': torch.float32,
                     'meta_keys': None,
                     'meta_key_postfix': DEFAULT_POST_FIX,
                     'overwriting': False,
@@ -306,8 +320,14 @@ class Prototype_Static_Planner:
                     'allow_missing_keys': False,
                     'channel_dim': None
                     },
-                
-                },
+                'ToDeviced': {
+                    'keys': ['image', 'label'],
+                    'device': 'cuda',
+                    'non_blocking': True,
+                    'allow_missing_keys': False,
+                    'lazy': False,
+                    },
+            },
             'dynamic_transforms':{
                 #We probably won't perform on-the-fly validation constantly using full resolution/FOV as it 
                 # would take too long. We will probably perform it on patches, so clearly there will be a divergence
@@ -328,6 +348,13 @@ class Prototype_Static_Planner:
                     'bg_indices_key': None,
                     'lazy': False,
                     }, 
+                'NormalizeIntensityd': {
+                    'keys': ['image', 'label'],
+                    'subtrahend': None,
+                    'divisor': None,
+                    'channel_wise': False,
+                    'dtype': torch.float32
+                },
                 'DivisiblePadd': {
                     'keys': ['image', 'label'],
                     'k': 192,

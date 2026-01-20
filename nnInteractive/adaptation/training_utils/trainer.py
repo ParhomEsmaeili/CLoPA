@@ -8,6 +8,12 @@
 
 # wait what, take care of yourself and stay warm :) ty, will do. gym tomorrow? yeah im sleeping like  ababy tonig hlegs?l, hmm if you are i can yeah i am but nws if u want to do smth else. its either pull or legs for me aite see u there 7:30 sharp. lets see if the trains are running first :'(l)o'ololol aint shit funny hahahahha  !!!!!!! dude i was telling my cousin i was trying to move for that exact reason like 2 mins before i found out tdhat they were cancelled damn the universe is telling u to get out of hillingdon FR, gonn start looking this weekend.nice lmk if u need help im good at that stuff, do you have a good vibe check for houses hugely kk ty aite c ya send pics!! oki take care nyeee byebye
 
+
+
+# This entire codebase.................thanks fabian.
+# https://i.kym-cdn.com/entries/icons/original/000/034/623/Untitled-3.png
+
+
 from abc import abstractmethod
 import torch
 import numpy as np
@@ -42,7 +48,8 @@ class Trainer:
             raise RuntimeError("Trainer cannot be initialised on CPU device! Training requires GPU acceleration.")
         self.device = device
         self.preview_num_samples = 8  #Number of samples to preview for resume verification.
-        self.epoch_saving_period = 5 #Hardcoding this for now. 
+        self.epoch_saving_period = 1 #Hardcoding this for now, lets be extremely conservative with saving, writing 
+        #should be relatively insignificant compared to training time within the epoch....... 
         self.network = None #This will be setup later.
         self.global_iter_step = 0 #This is the global step, primarily to be used for tensorboard logging.
         #Initialised with 0, will be updated on resume.
@@ -132,9 +139,12 @@ class Trainer:
             assert prev_pred == None
             self.input_buffer = torch.zeros((b,c,h,w,d), device=self.device, dtype=input_image.dtype)
             self.input_buffer[:,0:1,:,:,:] = input_image
-            #Normalise!!! DO NOT FORGET TO NORMALISE THE IMAGE INPUT!!! Can't believe we forgot to do this...
-            self.input_buffer[:,0:1,:,:,:] -= self.input_buffer[:,0:1,:,:,:].mean()
-            self.input_buffer[:,0:1,:,:,:] /= self.input_buffer[:,0:1,:,:,:].std()
+            #Never mind, why the hell am i normalising here? This should be done in the dataloader so that
+            #we can have a training pipeline which will actually allow for augmentation properly. 
+            
+            # #Normalise!!! DO NOT FORGET TO NORMALISE THE IMAGE INPUT!!! Can't believe we forgot to do this...
+            # self.input_buffer[:,0:1,:,:,:] -= self.input_buffer[:,0:1,:,:,:].mean()
+            # self.input_buffer[:,0:1,:,:,:] /= self.input_buffer[:,0:1,:,:,:].std()
         else:
             #Lets filter the input buffer according to the propagated preds if provided.
             if propagated_preds is not None:
@@ -1178,6 +1188,11 @@ class Trainer:
             self.best_metrics = self.stored_state.get("best_metrics")
             if self.best_metrics is None:
                 raise RuntimeError("Best metrics not found in stored state for resume!") 
+            
+            self.best_epoch = self.stored_state.get("best_epoch")
+            if self.best_epoch is None:
+                raise RuntimeError("Best epoch not found in stored state for resume!")
+
             self.train_metric_history = self.stored_state.get("train_metric_history") 
             if self.train_metric_history is None:
                 raise RuntimeError("Train metric history not found in stored state for resume!") 
