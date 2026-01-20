@@ -201,8 +201,8 @@ class Prototype_Static_Planner:
             #available VRAM/availability of samples.  E.g., using mini-batch to introduce stochasticity/regularising
             #effects for small sample sizes.
             'total_iterations': total_iterations, 
-            'num_workers': 1,
-            'pin_memory': True,
+            'num_workers': 0,
+            'pin_memory': False,
             'deterministic_transforms':{
                 'LoadImaged': {
                     'keys': ['image', 'label'],
@@ -226,13 +226,15 @@ class Prototype_Static_Planner:
                     'allow_missing_keys': False,
                     'channel_dim': None
                     },
-                'ToDeviced': {
+                'EnsureTyped': {
                     'keys': ['image', 'label'],
+                    'data_type': "tensor",
+                    'dtype': [torch.float32, torch.int8],
                     'device': 'cuda',
-                    'non_blocking': True,
+                    'wrap_sequence': True,
+                    'track_meta': None,
                     'allow_missing_keys': False,
-                    'lazy': False,
-                    },     
+                    },   
             },
             'dynamic_transforms':{
                 'RandCropByPosNegLabeld': {
@@ -251,11 +253,14 @@ class Prototype_Static_Planner:
                     'bg_indices_key': None,
                     },
                 'NormalizeIntensityd': {
-                    'keys': ['image', 'label'],
+                    'keys': ['image'],
                     'subtrahend': None,
                     'divisor': None,
+                    'nonzero': False,
                     'channel_wise': False,
-                    'dtype': torch.float32
+                    'dtype': torch.float32,
+                    'allow_missing_keys': False,
+
                 },      
                 'DivisiblePadd': {
                     'keys': ['image', 'label'],
@@ -293,9 +298,9 @@ class Prototype_Static_Planner:
             #available VRAM/availability of samples. And patch-subsampling if used will also have an effect. We want
             #a reasonable measure of performance, which can suffer if samples are correlated (subsampling) or
             #batch size is too small.
-            'num_workers': 1,
+            'num_workers': 0,
             'total_iterations': total_iterations,
-            'pin_memory': True,
+            'pin_memory': False,
             'metrics': True,
             'deterministic_transforms':{
                 'LoadImaged': {
@@ -320,12 +325,14 @@ class Prototype_Static_Planner:
                     'allow_missing_keys': False,
                     'channel_dim': None
                     },
-                'ToDeviced': {
+                'EnsureTyped': {
                     'keys': ['image', 'label'],
+                    'data_type': "tensor",
+                    'dtype': [torch.float32, torch.int8],
                     'device': 'cuda',
-                    'non_blocking': True,
+                    'wrap_sequence': True,
+                    'track_meta': None,
                     'allow_missing_keys': False,
-                    'lazy': False,
                     },
             },
             'dynamic_transforms':{
@@ -349,11 +356,13 @@ class Prototype_Static_Planner:
                     'lazy': False,
                     }, 
                 'NormalizeIntensityd': {
-                    'keys': ['image', 'label'],
+                    'keys': ['image'],
                     'subtrahend': None,
                     'divisor': None,
+                    'nonzero': False,
                     'channel_wise': False,
-                    'dtype': torch.float32
+                    'dtype': torch.float32,
+                    'allow_missing_keys': False
                 },
                 'DivisiblePadd': {
                     'keys': ['image', 'label'],

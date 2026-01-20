@@ -141,7 +141,7 @@ class Trainer:
             self.input_buffer[:,0:1,:,:,:] = input_image
             #Never mind, why the hell am i normalising here? This should be done in the dataloader so that
             #we can have a training pipeline which will actually allow for augmentation properly. 
-            
+
             # #Normalise!!! DO NOT FORGET TO NORMALISE THE IMAGE INPUT!!! Can't believe we forgot to do this...
             # self.input_buffer[:,0:1,:,:,:] -= self.input_buffer[:,0:1,:,:,:].mean()
             # self.input_buffer[:,0:1,:,:,:] /= self.input_buffer[:,0:1,:,:,:].std()
@@ -166,6 +166,7 @@ class Trainer:
 
         for batch_idx in range(self.train_dataloading_config['total_iterations']):
             batch_data = next(iter(self.train_dataloader))
+            batch_data = {k: v.cpu() for k, v in batch_data.items()}
             metric_dict[batch_idx] = dict() 
 
             self.global_iter_step += 1
@@ -475,6 +476,8 @@ class Trainer:
         
         for batch_idx in range(self.val_dataloading_config['total_iterations']):
             batch_data = next(iter(self.val_dataloader))
+            batch_data = {k: v.cpu() for k, v in batch_data.items()}
+            torch.cuda.empty_cache()
             metric_dict[batch_idx] = dict()    
             per_iter_metric_dict = dict() #Initialise the metric dict for this batch which stores per-iter metrics.
 

@@ -10,6 +10,8 @@ app_local_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname
 sys.path.append(app_local_path)
 from nnInteractive.adaptation.io_operations import WriteImage, ContinualPersistentDataset
 from monai.transforms import (
+    ToDeviced,
+    EnsureTyped,
     LoadImaged,
     Compose,
     DivisiblePadd,
@@ -79,6 +81,8 @@ class DataHandler:
             )
 
         self.supported_load_transforms = {
+            'ToDeviced': make_factory(ToDeviced), #Using the same factory function as the other transform.
+            'EnsureTyped': make_factory(EnsureTyped),
             'LoadImaged': make_factory(LoadImaged),
             'EnsureChannelFirstd': make_factory(EnsureChannelFirstd),
             'Orientationd': make_factory(Orientationd),
