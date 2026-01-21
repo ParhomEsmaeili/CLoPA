@@ -262,6 +262,32 @@ class Prototype_Static_Planner:
                     'allow_missing_keys': False,
 
                 },      
+                'RandRotated': {
+                    'keys': ['image', 'label'],
+                    'range_x': [-30.0, 30.0],
+                    'range_y': [-30.0, 30.0],
+                    'range_z': [-30.0, 30.0],
+                    'prob': 0.2,
+                    'mode': ['bilinear', 'nearest'],
+                    'padding_mode': 'zeros',
+                    'keep_size': False, #Lets not assert this, we can handle size changes later with further padding/cropping.
+                    'lazy': False,
+                    'allow_missing_keys': False,
+                },
+                'RandZoomd': {
+                    'keys': ['image', 'label'],
+                    'prob': 0.3,
+                    'min_zoom': [0.5, 0.5, 0.5],
+                    'max_zoom': [2, 2, 2],
+                    'mode': ['area', 'nearest'],
+                    'padding_mode':'zeros',
+                    'align_corners': True,
+                    'dtype': [torch.float32, torch.int8],
+                    'keep_size': False,
+                    'allow_missing_keys': False,
+                    'lazy': False,
+                    
+                },
                 'DivisiblePadd': {
                     'keys': ['image', 'label'],
                     'k': 192,
