@@ -220,8 +220,10 @@ class DiceAUCMetric:
         #Now we will have to reduce over the batch.
         if self.batchwise_reduce:
             output = torch.stack(list(aucs.values()), dim=0).mean()  # shape: (B,)
+            assert output.device == torch.device('cpu'), "DiceAUCMetric output must be on CPU."
         else:
             output = aucs  # shape: (B,)
+            assert all([v.device == torch.device('cpu') for v in output.values()]), "DiceAUCMetric output must be on CPU."
         return output
 
 metric_registry = {

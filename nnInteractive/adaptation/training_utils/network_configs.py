@@ -89,7 +89,92 @@ class nnInteractiveUNetFrozen(nnInteractiveUNet):
         
         return model.to(device=device)
 
+
+class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
+    '''
+    nnInteractiveUNetInstanceNorm only adjusts the affine parameters on the instance norm layers.
+    '''
+    def __init__(self, existing_kwargs:dict | None, current_kwargs:dict):
+        super().__init__(existing_kwargs=None, current_kwargs=current_kwargs)
+        #Existing kwargs are ignored for now because its the same network, just with batchnorm layers.
+        self.existing_kwargs = existing_kwargs #We store it here, so that we can use it for building the network,
+        #but we do not use it in the super init as this would break the upstream class initialisation. 
+        self.current_kwargs = current_kwargs
+
+    def build_network_architecture(self, device:torch.device) -> torch.nn.Module:
+        model = super().build_network_architecture(device=device).to(device=device)
+
+        #Normally we look at the discrepancy between existing and current kwargs to determine how to configure,
+        #but this is just a dummy which adds batchnorm layers for debugging.
+        
+        # First, freeze ALL parameters in the entire model
+        for param in model.parameters():
+            param.requires_grad = False
+        
+        # Then, unfreeze only the affine parameters (weight and bias) of InstanceNorm3d layers
+        for module in model.modules():
+            if isinstance(module, nn.InstanceNorm3d):
+                if module.affine:
+                    module.weight.requires_grad = True
+                    module.bias.requires_grad = True
+                else:
+                    raise ValueError("InstanceNorm3d layer does not have affine parameters to train.") 
+        return model 
+    
+    def load_weights(self, device:torch.device, model, network_weights) -> torch.nn.Module:
+        model.load_state_dict(
+            network_weights
+        )
+        #NORMALLY we would need to add some additional logic to figure out where to load the weights but 
+        #in this case its just the same architecture so we can directly load them.
+        network_weights = None #Free up memory.
+        torch.cuda.empty_cache()
+        
+        
+        return model.to(device=device)
+
+class nnInteractiveUNetFILM:
+    '''
+    nnInteractiveUNetFILM only adjusts the FILM parameters.
+    '''
+    def __init__(self, existing_kwargs:dict | None, current_kwargs:dict):
+        #With film, we are adjusting the architecture slightly, so we cannot use super init.
+        self.existing_kwargs = existing_kwargs #We store it here, so that we can use it for building the network,
+        #but we do not use it in the super init as this would break the upstream class initialisation. 
+        self.current_kwargs = current_kwargs
+
+    def build_network_architecture(self, device:torch.device) -> torch.nn.Module:
+        raise NotImplementedError("nnInteractiveUNetFILM build_network_architecture is not implemented yet.") 
+        #This needs to take the existing nnUNet architecture and modify it to add FILM layers.
+
+        # model = film.build_network_architecture(device=device).to(device=device)
+
+        # for name, module in model.named_modules():
+        #     if 'film' in name.lower():
+        #         for param in module.parameters():
+        #             param.requires_grad = True
+        #     else:
+        #         for param in module.parameters():
+        #             param.requires_grad = False
+        # return model 
+    
+    def load_weights(self, device:torch.device, model, network_weights) -> torch.nn.Module:
+        raise NotImplementedError("nnInteractiveUNetFILM load_weights is not implemented yet.") 
+        #This needs to take the existing nnUNet weights and load them into the modified FILM architecture, i.e. in the non-FILM layers. 
+
+        # model.load_state_dict(
+        #     network_weights
+        # )
+        # #NORMALLY we would need to add some additional logic to figure out where to load the weights but 
+        # #in this case its just the same architecture so we can directly load them.
+        # network_weights = None #Free up memory.
+        # torch.cuda.empty_cache()
+        
+        
+        # return model.to(device=device) 
 network_registry = {
     'nnInteractiveUNet': make_factory(nnInteractiveUNet),
-    'nnInteractiveUNetFrozen': make_factory(nnInteractiveUNetFrozen)
+    'nnInteractiveUNetFrozen': make_factory(nnInteractiveUNetFrozen),
+    'nnInteractiveUNetTrainNorm': make_factory(nnInteractiveUNetInstanceNorm),
+    'nnInteractiveUNetTrainFILM': make_factory(nnInteractiveUNetFILM),
 }

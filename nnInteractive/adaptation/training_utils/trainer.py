@@ -166,7 +166,10 @@ class Trainer:
 
         for batch_idx in range(self.train_dataloading_config['total_iterations']):
             batch_data = next(iter(self.train_dataloader))
+            assert batch_data['image'].shape[2:] == batch_data['label'].shape[2:], "Image and label spatial dimensions do not match!"
             batch_data = {k: v.cpu() for k, v in batch_data.items()}
+            torch.cuda.empty_cache() #lets empty cache like a madman... 
+            # oh if only we were blessed with 1TB of VRAM. 
             metric_dict[batch_idx] = dict() 
 
             self.global_iter_step += 1
@@ -193,13 +196,13 @@ class Trainer:
             #             batch_data[key] = batch_data[key][non_empty_samples]
             
             #Now we have filtered out empty samples a-priori.
-            gt = batch_data['label'].to(device=self.device, dtype=torch.int8)
-            image = batch_data['image'].to(device=self.device)
+            gt = batch_data['label'].to(dtype=torch.int8) #.to(device=self.device, dtype=torch.int8)
+            image = batch_data['image']#.to(device=self.device)
             
             if 'Interactive Init' in self.train_prompters.keys():
                 input_prompts, input_prompts_lbs = self.train_prompters['Interactive Init'](
                     data={
-                        'gt': gt.squeeze(axis=1), #We will squeeze the channel dimension for prompt gen.
+                        'gt': gt.to(device=self.device).squeeze(axis=1), #We will squeeze the channel dimension for prompt gen.
                         'prev_pred': None
                     }
                 )
@@ -211,7 +214,7 @@ class Trainer:
                 raise RuntimeError("No valid initialisation mechanism found in train prompters!")
             
             output = self.forward_train(
-                input_image=image, 
+                input_image=image.to(device=self.device), 
                 input_prompts=input_prompts, 
                 input_prompts_lbs=input_prompts_lbs,
                 prev_pred=None,
@@ -221,8 +224,10 @@ class Trainer:
             #OUTPUT is going to be logits with shape BCHWD where C = number of classes. (2 for binary semantic seg.)
             loss = self.calc_base_loss(
                 output=output,
-                target=gt
+                target=gt.to(device=self.device)
                 )
+            torch.cuda.empty_cache() #This is getting a bit annoying.......
+
             #Now lets calculate the loss for the initial prediction.
             loss_dict.update(
                 {
@@ -245,8 +250,9 @@ class Trainer:
                         )
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
-                        per_iter_metric_dict['init'][metric][idx] = vals[idx]       
+                        per_iter_metric_dict['init'][metric][idx] = vals[idx].cpu()       
 
+                torch.cuda.empty_cache() #This is getting a bit annoying.......
 
             batchwise_final_pred = output.argmax(axis=1).unsqueeze(axis=1) #Put back the channel dimension.
             #We store a batchwise pred so that we have the "final" pred of a given batch sample at the end of the
@@ -262,7 +268,7 @@ class Trainer:
             }
 
             #Lets check if can do any early exits right away.
-            finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
+            finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
             if len(finished_samples) > 0:
                 output, gt, image, propagated_preds, batchwise_final_pred = self.filter_finished_samples(
                         finished_samples,
@@ -277,12 +283,12 @@ class Trainer:
                     
                     input_prompts, input_prompts_lbs = self.train_prompters['Interactive Edit'](
                         data={
-                            'gt': gt.squeeze(axis=1), #We will squeeze the channel dimension.
+                            'gt': gt.squeeze(axis=1).to(device=self.device), #We will squeeze the channel dimension.
                             'prev_pred': output.argmax(axis=1) #Axis=1 is the class dimension. 
                         }
                     )
                     output = self.forward_train(
-                    input_image=image, 
+                    input_image=image.to(device=self.device), 
                     input_prompts=input_prompts, 
                     input_prompts_lbs=input_prompts_lbs,
                     prev_pred=output.argmax(axis=1).unsqueeze(axis=1), #Put back the channel dimension.
@@ -292,8 +298,10 @@ class Trainer:
                     #OUTPUT is going to be logits with shape BCHWD where C = number of classes. (2 for binary semantic seg.)
                     loss = self.calc_base_loss(
                         output=output,
-                        target=gt
+                        target=gt.to(device=self.device)
                         )
+                    torch.cuda.empty_cache() #This is getting a bit annoying.......
+
                     #Now lets calculate the loss for the initial prediction.
                     loss_dict.update(
                         { #We reindex according to the propagated preds original indices.
@@ -315,12 +323,12 @@ class Trainer:
                                 )
                             #Now lets distribute them into a batch separated dict. 
                             for current, orig in propagated_preds.items():
-                                per_iter_metric_dict[f'Interactive Edit Iter {i}'][metric][orig] = vals[current]       
+                                per_iter_metric_dict[f'Interactive Edit Iter {i}'][metric][orig] = vals[current].cpu()      
 
                     #Here we check if we should early exit, we terminate a sample if the segmentation perfectly aligns.
                     
                     #IF there is an finished sample then we will need to filter it. 
-                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
+                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
                     #Now we need to index into the batchwise final pred to place the finished samples.
                     if len(finished_samples) > 0:
                         output, gt, image, propagated_preds, batchwise_final_pred = self.filter_finished_samples(
@@ -360,8 +368,9 @@ class Trainer:
                         )
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
-                        per_iter_metric_dict['final'][metric][idx] = vals[idx]
-            
+                        per_iter_metric_dict['final'][metric][idx] = vals[idx].cpu()
+                torch.cuda.empty_cache() #This is getting a bit annoying.......
+
             #Now lets move them into the batch level metrics dict.
 
             #Now lets move the metrics from this batch into the overall metric dict.
@@ -384,7 +393,9 @@ class Trainer:
                     batch_data['label'].shape[0]) #Batch size)
                 for metric, metric_fn in self.aggregate_train_metrics.items()
             }
-        
+            torch.cuda.empty_cache() #This is getting a bit annoying.......
+
+        #Now that we have finished all batches for this epoch, we can do the writing of metrics to tensorboard.
         write_per_iter_metrics = {metric: None for metric in self.per_iter_train_metrics.keys() if self.per_iter_train_metric_wrappers[metric]['write']}
         for metric in write_per_iter_metrics.keys(): 
             #Lets gather the list of values across all batches for an epoch summarised metric.
@@ -429,6 +440,16 @@ class Trainer:
         })
 
         # self.logger.info("Train Mean Dice - " + str(metric_dict['Train Mean Dice']))
+        #one last time.
+
+        #Lets try and flush the cache, not fast but as long as our code doesn't break thats more important.
+        del image 
+        del gt 
+        del output 
+        del batch_data
+        del loss_dict
+        del per_iter_metric_dict
+        torch.cuda.empty_cache() #This is getting a bit annoying.......
 
     def update_parameters(
         self, 
@@ -476,6 +497,7 @@ class Trainer:
         
         for batch_idx in range(self.val_dataloading_config['total_iterations']):
             batch_data = next(iter(self.val_dataloader))
+            assert batch_data['image'].shape[2:] == batch_data['label'].shape[2:], "Image and label spatial dimensions do not match!"
             batch_data = {k: v.cpu() for k, v in batch_data.items()}
             torch.cuda.empty_cache()
             metric_dict[batch_idx] = dict()    
@@ -500,13 +522,13 @@ class Trainer:
             #             batch_data[key] = batch_data[key][non_empty_samples]
             
             #Now we have filtered out empty samples a-priori.
-            gt = batch_data['label'].to(device=self.device, dtype=torch.int8)
-            image = batch_data['image'].to(device=self.device)
+            gt = batch_data['label'].to(dtype=torch.int8)
+            image = batch_data['image']#.to(device=self.device)
             
             if 'Interactive Init' in self.val_prompters.keys():
                 input_prompts, input_prompts_lbs = self.val_prompters['Interactive Init'](
                     data={
-                        'gt': gt.squeeze(axis=1), #We will squeeze the channel dimension for prompt gen.
+                        'gt': gt.squeeze(axis=1).to(device=self.device), #We will squeeze the channel dimension for prompt gen.
                         'prev_pred': None
                     }
                 )
@@ -518,13 +540,14 @@ class Trainer:
                 raise RuntimeError("No valid initialisation mechanism found in train prompters!")
             
             output = self.forward_eval(
-                input_image=image, 
+                input_image=image.to(device=self.device), 
                 input_prompts=input_prompts, 
                 input_prompts_lbs=input_prompts_lbs,
                 prev_pred=None,
                 initialise=True
                 )
-            
+            torch.cuda.empty_cache() #This is getting a bit annoying.......
+
             #OUTPUT is going to be logits with shape BCHWD where C = number of classes. (2 for binary semantic seg.)
             per_iter_metric_dict.setdefault('init', dict())
             
@@ -555,7 +578,7 @@ class Trainer:
             }
 
             #Lets check if can do any early exits right away.
-            finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
+            finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
             if len(finished_samples) > 0:
                 output, gt, image, propagated_preds, batchwise_final_pred = self.filter_finished_samples(
                         finished_samples,
@@ -570,20 +593,21 @@ class Trainer:
                     
                     input_prompts, input_prompts_lbs = self.val_prompters['Interactive Edit'](
                         data={
-                            'gt': gt.squeeze(axis=1), #We will squeeze the channel dimension.
-                            'prev_pred': output.argmax(axis=1) #Axis=1 is the class dimension. 
+                            'gt': gt.to(device=self.device).squeeze(axis=1), #We will squeeze the channel dimension.
+                            'prev_pred': output.argmax(axis=1).to(device=self.device) #Axis=1 is the class dimension. 
                         }
                     )
                     output = self.forward_eval(
-                    input_image=image, 
+                    input_image=image.to(device=self.device), 
                     input_prompts=input_prompts, 
                     input_prompts_lbs=input_prompts_lbs,
-                    prev_pred=output.argmax(axis=1).unsqueeze(axis=1), #Put back the channel dimension.
+                    prev_pred=output.argmax(axis=1).unsqueeze(axis=1).to(device=self.device), #Put back the channel dimension.
                     initialise=False,
                     propagated_preds=propagated_preds)
             
                     #OUTPUT is going to be logits with shape BCHWD where C = number of classes. (2 for binary semantic seg.)
-    
+                    torch.cuda.empty_cache() #This is getting a bit annoying.......
+
                     #Lets calculate any metrics depending on the wrapper arguments:
                     per_iter_metric_dict[f'Interactive Edit Iter {i}'] = dict()
 
@@ -597,12 +621,12 @@ class Trainer:
                                 )
                             #Now lets distribute them into a batch separated dict. 
                             for current, orig in propagated_preds.items():
-                                per_iter_metric_dict[f'Interactive Edit Iter {i}'][metric][orig] = vals[current]       
+                                per_iter_metric_dict[f'Interactive Edit Iter {i}'][metric][orig] = vals[current].cpu()       
 
                     #Here we check if we should early exit, we terminate a sample if the segmentation perfectly aligns.
                     
-                    #IF there is an finished sample then we will need to filter it. 
-                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
+                    #IF there is a finished sample then we will need to filter it. 
+                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
                     #Now we need to index into the batchwise final pred to place the finished samples.
                     if len(finished_samples) > 0:
                         output, gt, image, propagated_preds, batchwise_final_pred = self.filter_finished_samples(
@@ -631,7 +655,8 @@ class Trainer:
                         batchwise_final_pred, 
                         batch_data['label'].to(device=self.device), #Calc with the original gt!
                         self.configs_labels_dict
-                        )
+                        ).cpu()
+                    torch.cuda.empty_cache() #This is getting a bit annoying.......
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
                         per_iter_metric_dict['final'][metric][idx] = vals[idx]
@@ -690,7 +715,13 @@ class Trainer:
                 write_aggregate_metrics[metric] = torch.tensor(
                     [list(metric_dict[batch_idx]['aggregate'][metric].values()) for batch_idx in metric_dict.keys()]).mean() #Average over all samples (batch and epoch!)
 
-        
+        #Dumping variables to free up GPU memory.
+        del image 
+        del gt
+        del output 
+        del batch_data 
+        torch.cuda.empty_cache() #This is getting a bit annoying.......
+
         #Lets determine what the dict we need to pull from for comparison is.
         if self.improvement_criterion_config['metric_type'] == 'per_iter':
             comparison_dict = write_per_iter_metrics
@@ -897,13 +928,15 @@ class Trainer:
 
     def extract_trainable_params(self):
         #For now, lets put a dummy where it will just return all the network parameters.
-        if self.network_architecture != 'nnInteractiveUNet' and self.network_architecture != 'nnInteractiveUNetFrozen':
-            raise NotImplementedError("Only nnInteractiveUNet supported for trainable param extraction currently!")
+        if self.network_architecture not in network_registry.keys():
+            raise RuntimeError(f"Network architecture {self.network_architecture} not found in network registry, so can't be used for extracting trainable params!")
         elif self.network_architecture == 'nnInteractiveUNetFrozen':
+            return [(name, param) for (name, param) in self.network.named_parameters() if param.requires_grad]
+        elif self.network_architecture == 'nnInteractiveUNetTrainNorm':
             return [(name, param) for (name, param) in self.network.named_parameters() if param.requires_grad]
         elif self.network_architecture == 'nnInteractiveUNet':
             return self.network.parameters()
-    
+
     def save_ckpt(self, is_best: bool, target_dir: str):
         #Saving the current training state to a checkpoint file in the tmp dir. 
         if self.network == None:

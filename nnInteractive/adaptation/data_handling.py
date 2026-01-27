@@ -15,6 +15,7 @@ from monai.transforms import (
     LoadImaged,
     Compose,
     DivisiblePadd,
+    SpatialPadd,
     CenterSpatialCropd,
     EnsureChannelFirstd, 
     Orientationd,
@@ -27,8 +28,12 @@ from monai.transforms import (
     RandGaussianNoised,
     RandGaussianSmoothd,
     RandAdjustContrastd,
-    RandSimulateLowResolutiond
+    RandSimulateLowResolutiond,
+    RandRotate90d,
+    RandScaleIntensityd,
+    RandFlipd
 )
+from nnInteractive.adaptation.training_utils.dataloading_augs import RandConditionalScaling, RandScaleIntensityClampedd
 from nnInteractive.adaptation.training_utils.general_utils import make_factory
 from torch.utils.data import RandomSampler, Sampler 
 import torch
@@ -87,6 +92,7 @@ class DataHandler:
             'LoadImaged': make_factory(LoadImaged),
             'EnsureChannelFirstd': make_factory(EnsureChannelFirstd),
             'Orientationd': make_factory(Orientationd),
+            'SpatialPadd': make_factory(SpatialPadd),
             'DivisiblePadd': make_factory(DivisiblePadd),
             'CenterSpatialCropd': make_factory(CenterSpatialCropd),
             'RandCropByPosNegLabeld': make_factory(RandCropByPosNegLabeld),
@@ -94,11 +100,17 @@ class DataHandler:
             'NormalizeIntensityd': make_factory(NormalizeIntensityd),
             'SpatialResampled': make_factory(SpatialResampled),
             'RandRotated': make_factory(RandRotated),
+            'RandConditionalScaling': make_factory(RandConditionalScaling),
+            'RandScaleIntensityClampedd': make_factory(RandScaleIntensityClampedd),
             'RandZoomd': make_factory(RandZoomd),
             'RandGaussianNoised': make_factory(RandGaussianNoised),
             'RandGaussianBlurd': make_factory(RandGaussianSmoothd),
             'RandAdjustContrastd': make_factory(RandAdjustContrastd),
-            'RandSimulateLowResolutiond': make_factory(RandSimulateLowResolutiond)
+            'RandSimulateLowResolutiond': make_factory(RandSimulateLowResolutiond),
+            'RandRotate90d': make_factory(RandRotate90d),
+            'RandFlipd': make_factory(RandFlipd), #Using the same factory as rotate90 since they have the same args.
+            'RandScaleIntensityd': make_factory(RandScaleIntensityd),
+            
         } 
 
         self.supported_dataset_constructors = [

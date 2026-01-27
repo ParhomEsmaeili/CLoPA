@@ -10,6 +10,7 @@ import os
 import sys
 import numpy as np
 import torch 
+import math
 from monai.utils.enums import PostFix
 DEFAULT_POST_FIX = PostFix.meta()
 # app_local_path = os.path.abspath(os.path.dirname(os.path.dirname((os.path.dirname(__file__)))))
@@ -234,7 +235,18 @@ class Prototype_Static_Planner:
                     'wrap_sequence': True,
                     'track_meta': None,
                     'allow_missing_keys': False,
-                    },   
+                    },  
+                'NormalizeIntensityd': { 
+                    #For now we will not bother to make an effort to move beyond full-image z-score normalisation as we will not have sufficient samples to make reliable
+                    # estimates of foreground intensity characteristics, for example. Nor will we look at foreground regions based on the mask for this reason also. 
+                    'keys': ['image'],
+                    'subtrahend': None,
+                    'divisor': None,
+                    'nonzero': False,
+                    'channel_wise': False,
+                    'dtype': torch.float32,
+                    'allow_missing_keys': False,
+                }, 
             },
             'dynamic_transforms':{
                 'RandCropByPosNegLabeld': {
@@ -248,55 +260,168 @@ class Prototype_Static_Planner:
                     'image_threshold': 0.0,
                     'allow_smaller': True,
                     'allow_missing_keys': False,
-                    'lazy': False,
+                    'lazy': True,
                     'fg_indices_key': None,
                     'bg_indices_key': None,
-                    },
-                'NormalizeIntensityd': {
+                },
+                # 'RandZoomd': {
+                # 'keys': ['image', 'label'],
+                # 'prob': 0.3,
+                # 'min_zoom': [0.5, 0.5, 0.5],
+                # 'max_zoom': [2, 2, 2],
+                # 'mode': ['bilinear', 'nearest-exact'],
+                # 'padding_mode':'zeros',
+                # 'align_corners': None,
+                # 'dtype': [torch.float32, torch.int8],
+                # 'keep_size': False,
+                # 'allow_missing_keys': False,
+                # 'lazy': True,  
+                # },
+                # Conditional scaling augmentation
+                'RandConditionalScaling': {
+                    'keys': ['image', 'label'],
+                    'prob': 1, #0.3,
+                    'async_prob': 0.6,
+                    'scale_range_iso': (0.5, 2),
+                    'scale_range_aniso': ((0.5, 2), (0.5, 2), (0.5, 2)),
+                    'mode': ['bilinear','nearest'],
+                    'padding_mode': 'zeros',
+                    'lazy': True,
+                },   
+                'RandRotated': {
+                    'keys': ['image', 'label'],
+                    'range_x': [-30.0 * math.pi/360, 30.0 * math.pi/360],
+                    'range_y': [-30.0 * math.pi/360, 30.0 * math.pi/360],
+                    'range_z': [-30.0 * math.pi/360, 30.0 * math.pi/360],
+                    'prob': 1, #0.2,
+                    'mode': ['bilinear', 'nearest'],
+                    'padding_mode': 'zeros',
+                    'align_corners': None,
+                    'keep_size': False, #Lets not assert this, we can handle size changes later with further padding/cropping.
+                    'lazy': True,
+                    'allow_missing_keys': False,
+                    'dtype': torch.float32,
+                },
+                'SpatialPadd': {
+                    'keys': ['image', 'label'],
+                    'spatial_size': app_parameters.get('patch_size', (192, 192, 192)),
+                    'method': 'symmetric',
+                    'mode': 'constant',
+                    'constant_values': 0,
+                    'allow_missing_keys': False,
+                    'lazy': True,
+                },
+                'CenterSpatialCropd': {
+                    'keys': ['image', 'label'],
+                    'roi_size': app_parameters.get('patch_size', (192, 192, 192)),
+                    'allow_missing_keys': False,
+                    'lazy': True,   
+                },
+                'RandGaussianNoised': {
                     'keys': ['image'],
-                    'subtrahend': None,
-                    'divisor': None,
-                    'nonzero': False,
+                    'prob': 1, #0.15,
+                    'mean': 0.0,
+                    'std': 0.1**0.5,
+                    'dtype': torch.float32,
+                    'allow_missing_keys': False,
+                    'sample_std': True,
+                    # 'lazy': True,
+                },
+                'RandGaussianBlurd': {
+                    'keys': ['image'],
+                    'prob': 1, #0.2,
+                    'sigma_x': (0.5, 1.5),
+                    'sigma_y': (0.5, 1.5),
+                    'sigma_z': (0.5, 1.5),
+                    'approx': 'sampled', #'erf',
+                    'allow_missing_keys': False,
+                    # 'lazy': True,
+                },
+                'RandScaleIntensityd': {
+                    'keys': ['image'],
+                    'factors': 0.3,
+                    'prob': 1, #0.15,
                     'channel_wise': False,
                     'dtype': torch.float32,
                     'allow_missing_keys': False,
-
-                },      
-                'RandRotated': {
-                    'keys': ['image', 'label'],
-                    'range_x': [-30.0, 30.0],
-                    'range_y': [-30.0, 30.0],
-                    'range_z': [-30.0, 30.0],
-                    'prob': 0.2,
-                    'mode': ['bilinear', 'nearest'],
-                    'padding_mode': 'zeros',
-                    'keep_size': False, #Lets not assert this, we can handle size changes later with further padding/cropping.
-                    'lazy': False,
+                    # 'lazy': True,
+                },
+                'RandScaleIntensityClampedd': { #This is the clamped/contrast adjustment.
+                    'keys': ['image'],
+                    'factors': 0.3,
+                    'prob': 1, #0.15,
+                    'dtype': torch.float32,
+                    'channel_wise': False, #single channel.
+                    'allow_missing_keys': False,
+                    # 'lazy': True,
+                },
+                'RandSimulateLowResolutiond': {
+                    'keys': ['image'],
+                    'prob':1, #0.1, 
+                    'downsample_mode': 'nearest', 
+                    'upsample_mode': 'trilinear', 
+                    'zoom_range': (0.5, 1.0), 
+                    'align_corners': True, 
+                    'device': None,
                     'allow_missing_keys': False,
                 },
-                'RandZoomd': {
-                    'keys': ['image', 'label'],
-                    'prob': 0.3,
-                    'min_zoom': [0.5, 0.5, 0.5],
-                    'max_zoom': [2, 2, 2],
-                    'mode': ['area', 'nearest'],
-                    'padding_mode':'zeros',
-                    'align_corners': True,
-                    'dtype': [torch.float32, torch.int8],
-                    'keep_size': False,
+                'RandAdjustContrastd': {
+                    'keys': ['image'],
+                    'prob': 1, #0.1,
+                    'gamma': (0.7, 1.5),
+                    'invert_image': True,
+                    'retain_stats': True,
                     'allow_missing_keys': False,
-                    'lazy': False,
-                    
                 },
-                'DivisiblePadd': {
-                    'keys': ['image', 'label'],
-                    'k': 192,
-                    'mode': 'constant',
-                    'method': 'symmetric',
+                'RandAdjustContrastd': {
+                    'keys': ['image'],
+                    'prob': 1, #0.3,
+                    'gamma': (0.7, 1.5),
+                    'invert_image': False,
+                    'retain_stats': True,
                     'allow_missing_keys': False,
-                    'lazy': False,
+                },
+                'RandFlipd': {
+                    'keys': ['image', 'label'],
+                    'prob': 1, #0.5,
+                    'spatial_axis': [0,1,2],
+                    'allow_missing_keys': False,
+                    'lazy': True,
+                },
+                #Instead of transposing random axes we will just rotate randomly.
+                'RandRotate90d': {
+                    'keys': ['image', 'label'],
+                    'prob': 1, #0.5,
+                    'max_k': 3,
+                    'spatial_axes': [0,1],
+                    'allow_missing_keys': False,
+                    'lazy': True,
+                },
+                'RandRotate90d': {
+                    'keys': ['image', 'label'],
+                    'prob': 1, #0.5,
+                    'max_k': 3,
+                    'spatial_axes': [1,2],
+                    'allow_missing_keys': False,
+                    'lazy': True,
+                },
+                'RandRotate90d': {
+                    'keys': ['image', 'label'],
+                    'prob': 1, #0.5,
+                    'max_k': 3,
+                    'spatial_axes': [0,2],
+                    'allow_missing_keys': False,
+                    'lazy': True,
+                },
+                'RandScaleIntensityd': {
+                    'keys': ['image'],
+                    'factors': [-2,-2],
+                    'prob': 1, #0.1,
+                    'channel_wise': False, #Single channel..
+                    'dtype': torch.float32,
+                    'allow_missing_keys': False,
                     }
-                }
+            }
         }
         return updated_dataloading_configs
     
@@ -360,6 +485,15 @@ class Prototype_Static_Planner:
                     'track_meta': None,
                     'allow_missing_keys': False,
                     },
+                'NormalizeIntensityd': {
+                    'keys': ['image'],
+                    'subtrahend': None,
+                    'divisor': None,
+                    'nonzero': False,
+                    'channel_wise': False,
+                    'dtype': torch.float32,
+                    'allow_missing_keys': False,
+                }, 
             },
             'dynamic_transforms':{
                 #We probably won't perform on-the-fly validation constantly using full resolution/FOV as it 
@@ -379,27 +513,25 @@ class Prototype_Static_Planner:
                     'allow_missing_keys': False,
                     'fg_indices_key': None,
                     'bg_indices_key': None,
-                    'lazy': False,
+                    'lazy': True,
                     }, 
-                'NormalizeIntensityd': {
-                    'keys': ['image'],
-                    'subtrahend': None,
-                    'divisor': None,
-                    'nonzero': False,
-                    'channel_wise': False,
-                    'dtype': torch.float32,
-                    'allow_missing_keys': False
-                },
-                'DivisiblePadd': {
+                'SpatialPadd': {
                     'keys': ['image', 'label'],
-                    'k': 192,
-                    'mode': 'constant',
+                    'spatial_size': app_parameters.get('patch_size', (192, 192, 192)),
                     'method': 'symmetric',
+                    'mode': 'constant',
+                    'constant_values': 0,
                     'allow_missing_keys': False,
-                    'lazy': False,
-                    }
+                    'lazy': True,
+                },
+                'CenterSpatialCropd': {
+                    'keys': ['image', 'label'],
+                    'roi_size': app_parameters.get('patch_size', (192, 192, 192)),
+                    'allow_missing_keys': False,
+                    'lazy': True,   
                 }, 
             }
+        }
         return updated_dataloading_configs 
     
     def determine_training_prompter(
@@ -725,6 +857,64 @@ class Prototype_Static_Planner:
 
 
 
+class Prototype_Static_PlannerTrainNorm(Prototype_Static_Planner):
+    def __init__(self, planner_config):
+        super().__init__(planner_config) 
+    
+    def determine_algorithm_config(
+        self,
+        meta_algorithm_state: dict,
+        app_parameters: dict,
+        *args,
+        **kwargs
+        ) -> dict:
+        '''
+        Only thing we are adjusting for this is the model architecture to have trainable norm layers.
+        '''
+        #This pertains to the actual functionalities of the algorithm, which is more general than
+        #just training/validation.
+
+        #NOTE: For now, we are just using the same configuration but trying to make it more efficient
+        algo_conf = {
+            'input_encoding': 'nnInteractiveUNetEncoding',
+            'input_handling_configs': app_parameters.get('input_handling_configs'),
+            'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
+            #for now.
+            'model_architecture': 'nnInteractiveUNetTrainNorm', #'nnInteractiveUNet',
+            'network_configuration': app_parameters.get('network_configuration'),
+            }
+        return algo_conf
+    
+class Prototype_Static_PlannerTrainFILM(Prototype_Static_Planner):
+    def __init__(self, planner_config):
+        super().__init__(planner_config) 
+
+    def determine_algorithm_config(
+        self,
+        meta_algorithm_state: dict,
+        app_parameters: dict,
+        *args,
+        **kwargs
+        ) -> dict:
+        '''
+        Only thing we are adjusting for this is the model architecture to have trainable FiLM layers.
+        '''
+        #This pertains to the actual functionalities of the algorithm, which is more general than
+        #just training/validation.
+
+        #NOTE: For now, we are just using the same configuration but trying to make it more efficient
+        algo_conf = {
+            'input_encoding': 'nnInteractiveUNetEncoding',
+            'input_handling_configs': app_parameters.get('input_handling_configs'),
+            'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
+            #for now.
+            'model_architecture': 'nnInteractiveUNetTrainFILM', #'nnInteractiveUNet',
+            'network_configuration': app_parameters.get('network_configuration'),
+            }
+        return algo_conf
+
 planner_registry = {
     'Prototype_Static_Planner': Prototype_Static_Planner,
+    'Prototype_Static_Planner_TrainNorm': Prototype_Static_PlannerTrainNorm,
+    'Prototype_Static_Planner_TrainFILM': Prototype_Static_PlannerTrainFILM,
 }
