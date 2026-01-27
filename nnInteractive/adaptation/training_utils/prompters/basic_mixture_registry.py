@@ -391,7 +391,9 @@ class RandomAgent:
                     #We can skip over the none regions because they arealready empty, and so any() will flag an empty list as Falsey.
                     raise Exception(f'All of the error sampling regions are empty for batch index {batch_idx}.')
                 
-            
+            gt = gt.to(device='cpu')
+            del pred, gt
+            torch.cuda.empty_cache()
         else:
             #In this case, we have a pred provided, so we can compute the error regions. 
             #  
@@ -449,9 +451,7 @@ class RandomAgent:
             pred = pred.to(device='cpu')
             gt = gt.to(device='cpu')
             del pred, gt
-            torch.cuda.empty_cache()
-
-            
+            torch.cuda.empty_cache()  
         return sampling_regions_dict
         
     def generate_prompts(

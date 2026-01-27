@@ -127,26 +127,42 @@ class DiceMetric:
             #Better to just filter out empty samples a-priori, and to just consider whether the overlap was done
             #correctly AND consistently (in the absence of fg gt the correct thing is to be fully background!)
         else:
-            dice_scores = num / denom  # shape: (B,)   
+            dice_scores = num / denom  # shape: (B,)  
+            dice_scores = dice_scores.to(torch.device('cpu'))
+            
+            del tp, fp, fn, denom, predictions, targets
+            assert dice_scores.ndim == 1, "Dice scores must be of shape (B,)"
             #If any is nan, then we must check whether the numerator for that batch was also 0.
             if torch.isnan(dice_scores).any():
                 nan_mask = torch.isnan(dice_scores)
                 if nan_mask.ndim == 0:
-                    if num == 0:
-                        return torch.Tensor(1.0, device=dice_scores.device) #If both num and denom are 0, then we set dice to 1.
+                    if num == torch.zeros(dice_scores.shape[0]):
+                        del num 
+                        torch.cuda.empty_cache()
+                        return torch.ones(dice_scores.shape[0], device='cpu') #If both num and denom are 0, then we set dice to 1.
                     else:
-                        return torch.Tensor(0.0, device=dice_scores.device) #If num is not zero, but denom is zero, then we set dice to 0.
-                elif nan_mask.ndim > 1:
+                        #Then all were not zero despite no nan flagged, raise zero.
+                        del num 
+                        torch.cuda.empty_cache()
+                        return torch.zeros(dice_scores.shape[0], device='cpu') #If num is not zero, but denom is zero, then we set dice to 0.
+                elif nan_mask.ndim == 1:
                     for i in range(dice_scores.shape[0]):
                         if nan_mask[i]:
                             if num[i] == 0:
                                 dice_scores[i] = 1.0 #If both num and denom are 0, then we set dice to 1.
                             else:
                                 dice_scores[i] = 0.0 #If num is not zero, but denom is zero, then we set dice to 0.
+                    del num 
+                    torch.cuda.empty_cache()
+                    return dice_scores
                 else:
                     raise NotImplementedError("DiceMetric currently does not support nan handling for dice scores with ndim > 1.")
+        
             else:
+                del num
+                torch.cuda.empty_cache()
                 return dice_scores
+            
 class DiceAUCMetric:
     def __init__(self, **kwargs):
         self.batchwise_reduce = kwargs.get('batchwise_reduce')

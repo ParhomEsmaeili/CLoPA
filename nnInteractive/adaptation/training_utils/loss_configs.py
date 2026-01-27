@@ -165,9 +165,10 @@ class DiceCrossEntropyLoss:
             self.reduction_params_dice['reduction']
         )
         if reduction == 'mean':
-            loss = loss.mean(dim=[1,2,3,4]) #This will compute the mean over the spatial dimensions.
+            loss = loss.mean(dim=[1,2,3,4]).cpu() #This will compute the mean over the spatial dimensions.
         elif reduction == 'sum':
             raise Exception('Sum reduction is not stable unless averaged on spatial dimensions first.')
+        torch.cuda.empty_cache()
         return loss
     
     def bce(self, output, target):
@@ -217,14 +218,15 @@ class DiceCrossEntropyLoss:
   
         assert output.shape[0] == target.shape[0]  #Batch size must be the same.
 
-        dice_loss = self.dice(output, target.to(device=output.device))
+        dice_loss = self.dice(output, target.to(device=output.device)).cpu()
         if output.shape[1] == 1: #Then we can use the default bce loss.
-            bce_loss = self.bce(output.squeeze(dim=1), target.squeeze(dim=1).to(device=output.device))
+            bce_loss = self.bce(output.squeeze(dim=1), target.squeeze(dim=1).to(device=output.device)).cpu()
             total_loss = self.weight['Dice'] * dice_loss + self.weight['BCE'] * bce_loss
         elif output.shape[1] > 1: #Then we just use the CE, even if its for binary case.
-            ce_loss = self.ce(output, target.to(device=output.device)) 
+            ce_loss = self.ce(output, target.to(device=output.device)).cpu()
             total_loss = self.weight['Dice'] * dice_loss + self.weight['CE'] * ce_loss
         
+        torch.cuda.empty_cache()
         return {idx: total_loss[idx] for idx in range(total_loss.shape[0])}
 
 

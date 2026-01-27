@@ -79,16 +79,16 @@ def uniform_random(binary_mask: torch.Tensor, args: dict):
             #NOTE: Don't think the garbage collector is actually doing anything here, so will be commenting it out as it is slowing down
             torch.cuda.empty_cache()
             #Indexing by batch
-            output_p[int(c_b_combinations[i, 1].to('cpu'))].extend(list(coords.split(1, 0)))
-            output_plb[int(c_b_combinations[i, 1].to('cpu'))].extend([torch.tensor([c_b_combinations[i, 0]], device=device, dtype=torch.int8)] * coords.shape[0])
+            output_p[int(c_b_combinations[i, 1].to('cpu'))].extend(list(coords.cpu().split(1, 0)))
+            output_plb[int(c_b_combinations[i, 1].to('cpu'))].extend([torch.tensor([c_b_combinations[i, 0]], dtype=torch.int8)] * coords.cpu().shape[0])
         
         elif possible_coords_split_num[i] < n_max and possible_coords_split_num[i] != 0:
             #If there are not sufficient voxels greater than the upper limit provided, return the max quantity which is all of them.
             coords = possible_coords[torch.nonzero(all_matches[:,i], as_tuple=True)[0]][:, comb_length:].to(dtype=torch.int32)
             #NOTE: Don't think the garbage collector is actually doing anything here, so will be commenting it out as it is slowing down
             torch.cuda.empty_cache()
-            output_p[int(c_b_combinations[i, 1].to('cpu'))].extend(list(coords.split(1, 0)))
-            output_plb[int(c_b_combinations[i, 1].to('cpu'))].extend([torch.tensor([c_b_combinations[i, 0]], device=device, dtype=torch.int8)] * coords.shape[0])
+            output_p[int(c_b_combinations[i, 1].to('cpu'))].extend(list(coords.cpu().split(1, 0)))
+            output_plb[int(c_b_combinations[i, 1].to('cpu'))].extend([torch.tensor([c_b_combinations[i, 0]], dtype=torch.int8)] * coords.cpu().shape[0])
         
         elif possible_coords_split_num[i] == 0:
             #NOTE: Don't think the garbage collector is actually doing anything here, so will be commenting it out as it is slowing down
@@ -100,4 +100,5 @@ def uniform_random(binary_mask: torch.Tensor, args: dict):
         else:
             raise RuntimeError("An unexpected error occurred during point sampling from the provided binary mask.")
     
+    del idxs, coords, possible_coords, all_matches, c_b_combinations, comb_length, possible_coords_split_num
     return output_p, output_plb

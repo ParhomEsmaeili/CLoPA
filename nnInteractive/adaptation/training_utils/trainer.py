@@ -73,6 +73,9 @@ class Trainer:
         with torch.cuda.amp.autocast():
             #Implement the forward pass here.
             output=self.network(input)
+
+        input = None #Free up memory
+        torch.cuda.empty_cache() #This is getting a bit annoying.......
         return output 
     
     def filter_finished_samples(
@@ -109,6 +112,7 @@ class Trainer:
         #update the indices 
         propagated_preds = {new_idx: original_idx for new_idx, (_, original_idx) in enumerate(propagated_preds.items())}
     
+        torch.cuda.empty_cache() #This is getting a bit annoying.......
         return output, gt, image, propagated_preds, batchwise_final_pred
 
     @torch.inference_mode()
@@ -124,6 +128,9 @@ class Trainer:
         with torch.cuda.amp.autocast():
             #Implement the forward pass here.
             output=self.network(input)
+
+        input = None #Free up memory
+        torch.cuda.empty_cache() #This is getting a bit annoying.......
         return output 
     
     def construct_input(self, input_image, input_prompts, input_prompts_lbs, prev_pred, initialise=False, propagated_preds=None):
@@ -212,7 +219,7 @@ class Trainer:
                 raise NotImplementedError('Automatic Init not implemented yet in trainer!')
             else:
                 raise RuntimeError("No valid initialisation mechanism found in train prompters!")
-            
+            torch.cuda.empty_cache() #This is getting a bit annoying.......
             output = self.forward_train(
                 input_image=image.to(device=self.device), 
                 input_prompts=input_prompts, 
@@ -231,7 +238,7 @@ class Trainer:
             #Now lets calculate the loss for the initial prediction.
             loss_dict.update(
                 {
-                init: loss #Initially, the correspondence is
+                init: {idx: val.cpu() for idx, val in loss.items()} #Initially, the correspondence is
                 #fully 1-to-1 between original and current batch indices.
                 }
             )
@@ -268,7 +275,7 @@ class Trainer:
             }
 
             #Lets check if can do any early exits right away.
-            finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
+            finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0].cpu()
             if len(finished_samples) > 0:
                 output, gt, image, propagated_preds, batchwise_final_pred = self.filter_finished_samples(
                         finished_samples,
@@ -287,6 +294,9 @@ class Trainer:
                             'prev_pred': output.argmax(axis=1) #Axis=1 is the class dimension. 
                         }
                     )
+
+                    torch.cuda.empty_cache() #This is getting a bit annoying.......
+                    
                     output = self.forward_train(
                     input_image=image.to(device=self.device), 
                     input_prompts=input_prompts, 
@@ -305,7 +315,7 @@ class Trainer:
                     #Now lets calculate the loss for the initial prediction.
                     loss_dict.update(
                         { #We reindex according to the propagated preds original indices.
-                        f'Interactive Edit Iter {i}': {orig_idx: loss[current_idx] for current_idx, orig_idx in propagated_preds.items()}
+                        f'Interactive Edit Iter {i}': {orig_idx: loss[current_idx].cpu() for current_idx, orig_idx in propagated_preds.items()}
                         }
                     )
                     output = output.clone().detach()
@@ -324,11 +334,12 @@ class Trainer:
                             #Now lets distribute them into a batch separated dict. 
                             for current, orig in propagated_preds.items():
                                 per_iter_metric_dict[f'Interactive Edit Iter {i}'][metric][orig] = vals[current].cpu()      
+                        torch.cuda.empty_cache() #This is getting a bit annoying.......
 
                     #Here we check if we should early exit, we terminate a sample if the segmentation perfectly aligns.
                     
                     #IF there is an finished sample then we will need to filter it. 
-                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
+                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0].cpu()
                     #Now we need to index into the batchwise final pred to place the finished samples.
                     if len(finished_samples) > 0:
                         output, gt, image, propagated_preds, batchwise_final_pred = self.filter_finished_samples(
@@ -480,7 +491,7 @@ class Trainer:
                     [torch.mean(torch.stack(used_losses[i])) for i in range(batch_size)]
                     )
                 )
-        
+        total_loss = total_loss.to(device=self.device) #Lets move this to the correct device for the update.
         self.grad_scaler.scale(total_loss).backward()
         self.grad_scaler.step(self.optimiser)
         self.grad_scaler.update()
@@ -489,6 +500,9 @@ class Trainer:
         self.tensorboard_writer_fn({
             self.base_loss.name: total_loss
         }, self.global_iter_step) 
+
+        del total_loss
+        torch.cuda.empty_cache() #This is getting a bit annoying.......
 
     def validate(self, epoch_num):
         self.logger.info('Starting validation at epoch {}'.format(epoch_num))
@@ -561,7 +575,8 @@ class Trainer:
                         )
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
-                        per_iter_metric_dict['init'][metric][idx] = vals[idx]       
+                        per_iter_metric_dict['init'][metric][idx] = vals[idx].cpu()       
+                torch.cuda.empty_cache() #This is getting a bit annoying.......       
 
 
             batchwise_final_pred = output.argmax(axis=1).unsqueeze(axis=1) #Put back the channel dimension.
@@ -622,6 +637,7 @@ class Trainer:
                             #Now lets distribute them into a batch separated dict. 
                             for current, orig in propagated_preds.items():
                                 per_iter_metric_dict[f'Interactive Edit Iter {i}'][metric][orig] = vals[current].cpu()       
+                    torch.cuda.empty_cache() #This is getting a bit annoying.......
 
                     #Here we check if we should early exit, we terminate a sample if the segmentation perfectly aligns.
                     
@@ -656,11 +672,10 @@ class Trainer:
                         batch_data['label'].to(device=self.device), #Calc with the original gt!
                         self.configs_labels_dict
                         ).cpu()
-                    torch.cuda.empty_cache() #This is getting a bit annoying.......
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
-                        per_iter_metric_dict['final'][metric][idx] = vals[idx]
-            
+                        per_iter_metric_dict['final'][metric][idx] = vals[idx].cpu()
+                    torch.cuda.empty_cache() #This is getting a bit annoying.......
             #Now lets move them into the batch level metrics dict.
 
             #Now lets move the metrics from this batch into the overall metric dict.
