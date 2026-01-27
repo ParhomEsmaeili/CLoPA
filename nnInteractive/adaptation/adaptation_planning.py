@@ -576,7 +576,7 @@ class Prototype_Static_Planner:
                     } 
                 },
                 'use_mem': False, #Whether to use memory of past interactions in the inner loop to condition the prompter. 
-                'num_loop': 10, #Number of edit iters/inner loops in the inner loop
+                'num_loop': 5, #Number of edit iters/inner loops in the inner loop
                 } 
         return prompt_conf  #Currently static, no special treatment for now.7
 
@@ -622,7 +622,7 @@ class Prototype_Static_Planner:
                     } 
                 },
                 'use_mem': False, #Whether to use memory of past interactions in the inner loop to condition the prompter. 
-                'num_loop': 10, #Number of edit iters/inner loops in the inner loop
+                'num_loop': 5, #Number of edit iters/inner loops in the inner loop
                 } 
         return prompt_conf  #Currently static, no special treatment for now.7
 
