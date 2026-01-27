@@ -6,7 +6,19 @@ from typing import Union, Tuple, List
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
 import torch 
 from torch import nn
+from functools import partial
+from torch.utils.checkpoint import checkpoint 
 from nnInteractive.adaptation.training_utils.general_utils import make_factory 
+
+# class Checkpointed(nn.Module):
+#     def __init__(self, module):
+#         super().__init__()
+#         self.module = module
+
+#     def forward(self, *args):
+#         # only positional tensor args; avoid non-tensor kwargs here
+#         return checkpoint(self.module, *args)
+
 
 #Lets just copy the stub structure and slightly modify it. 
 class nnInteractiveUNet:
@@ -101,6 +113,13 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
         #but we do not use it in the super init as this would break the upstream class initialisation. 
         self.current_kwargs = current_kwargs
 
+    def apply_forward_checkpoint(self, model):
+        orig_forward = model.forward
+        def wrapped_forward(*args):
+            return checkpoint(partial(orig_forward), *args, use_reentrant=False)  # kwargs avoided; use partial if needed
+        model.forward = wrapped_forward
+        return model
+    
     def build_network_architecture(self, device:torch.device) -> torch.nn.Module:
         model = super().build_network_architecture(device=device).to(device=device)
 
@@ -119,6 +138,11 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
                     module.bias.requires_grad = True
                 else:
                     raise ValueError("InstanceNorm3d layer does not have affine parameters to train.") 
+        
+        #Lets try and checkpoint some operations so that we don't run out of VRAM....
+        #slower but at least it won't BREAK. This will need to overwrite the forward function of
+        #the prior model though, which is annoying. 
+        model = self.apply_forward_checkpoint(model)
         return model 
     
     def load_weights(self, device:torch.device, model, network_weights) -> torch.nn.Module:

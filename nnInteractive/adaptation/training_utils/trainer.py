@@ -238,7 +238,7 @@ class Trainer:
             #Now lets calculate the loss for the initial prediction.
             loss_dict.update(
                 {
-                init: {idx: val.cpu() for idx, val in loss.items()} #Initially, the correspondence is
+                init: {idx: val for idx, val in loss.items()} #Initially, the correspondence is
                 #fully 1-to-1 between original and current batch indices.
                 }
             )
@@ -315,7 +315,7 @@ class Trainer:
                     #Now lets calculate the loss for the initial prediction.
                     loss_dict.update(
                         { #We reindex according to the propagated preds original indices.
-                        f'Interactive Edit Iter {i}': {orig_idx: loss[current_idx].cpu() for current_idx, orig_idx in propagated_preds.items()}
+                        f'Interactive Edit Iter {i}': {orig_idx: loss[current_idx] for current_idx, orig_idx in propagated_preds.items()}
                         }
                     )
                     output = output.clone().detach()
