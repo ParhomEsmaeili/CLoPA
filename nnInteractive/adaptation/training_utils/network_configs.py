@@ -10,14 +10,15 @@ from functools import partial
 from torch.utils.checkpoint import checkpoint 
 from nnInteractive.adaptation.training_utils.general_utils import make_factory 
 
-# class Checkpointed(nn.Module):
-#     def __init__(self, module):
-#         super().__init__()
-#         self.module = module
+class CheckpointedModule(nn.Module):
+    def __init__(self, module, use_reentrant: bool = False):
+        super().__init__()
+        self.module = module
+        self.use_reentrant = use_reentrant
 
-#     def forward(self, *args):
-#         # only positional tensor args; avoid non-tensor kwargs here
-#         return checkpoint(self.module, *args)
+    def forward(self, *args):
+        # only positional tensor args; avoid non-tensor kwargs here
+        return checkpoint(self.module, *args, use_reentrant=self.use_reentrant)
 
 
 #Lets just copy the stub structure and slightly modify it. 
@@ -114,12 +115,83 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
         self.current_kwargs = current_kwargs
 
     def apply_forward_checkpoint(self, model):
+        network_structure = ['decoder','stages']
+        if not network_structure[-1] == 'stages':
+            raise NotImplementedError("Only implemented for 'stages' network structure.") 
+            
+        #Lets only checkpoint the decoder for now as the skip connections
+        #will make it more memory intensive.
+
+        #Lets assign a set of "levels" which we will permit checkpointing within. Even then, we will
+        #not probably checkpoint the entire block, just the most memory intensive activations. 
+        
+        #Now at the intra-level we can assign blocks which we will checkpoint.
+
+        #Lets assign the blocks within a "level" which can be checkpointed also.
+        encoder_blocks = ['blocks', 'conv'] #nnu-net uses the same overall naming convention within
+        decoder_blocks = ['convs', 'conv'] #nnu-net uses the same overall naming convention within
+        #a block, so we can use this to iterate over the blocks and checkpoint specific layers.
+        if encoder_blocks[0] != 'blocks' or decoder_blocks[0] != 'convs':
+            raise NotImplementedError("Only implemented for 'blocks' and 'convs' intra-level structure.")
+        
+
+        #it is not consistent between the encoder and decoder though, so we need to be careful.
+        
+        for name, module in model.named_modules():
+            parts = name.split('.') #Lets split by dot to get the module hierarchy.
+            #We will filter valid modules by order of hierarchy.
+            #we create a list which tracks at each level if we have matched a module.
+            if len(parts) < len(network_structure):
+                continue #Too short to match.
+
+            structure_checker = [parts[i] == network_structure[i] for i in range(len(network_structure))]
+            if not all(structure_checker):
+                continue
+            
+            #If structure matches now we look at intra level
+            if network_structure[0] == 'decoder':
+                look_here = decoder_blocks
+            elif network_structure[0] == 'encoder':
+                look_here = encoder_blocks
+            else:
+                raise ValueError("Unknown network structure for checkpointing.")
+            blockparts = parts[len(network_structure):]
+
+            if len(blockparts) != 2 * len(look_here): #Stages have indexing, and so do the blocks within
+                #each level.
+                continue #Not the right level to match, either too coarse or too granular. 
+            
+            # #Lets look past indexing of the stages.
+            # if blockparts[1] != look_here[0]:
+            #     continue
+            # #Within the block, we also have indexing of conv blocks.
+            # if blockparts[2] != look_here[1]:
+            #     continue
+            #We wrap both checks into one for loop.
+            intra_tracker = [blockparts[i * 2 + 1] == look_here[i] for i in range(len(look_here))]
+            if not all(intra_tracker):
+                continue
+            else:
+                #We have a match, we will checkpoint this module's forward pass.
+                try:
+                    block = model.get_submodule(name)
+                    # Replace the block with a checkpointed version
+                    parent_path, block_name = name.rsplit('.', 1)
+                    parent = model.get_submodule(parent_path) if parent_path else model
+                    setattr(parent, block_name, CheckpointedModule(block, use_reentrant=False))
+                    print(f"✓ Checkpointed {name}")
+                except Exception as e:
+                    print(f"✗ Failed to checkpoint {name}: {e}")
+
+            
+        return model
+    
+    def apply_forward_checkpoint_test_orig(self, model):
         orig_forward = model.forward
         def wrapped_forward(*args):
             return checkpoint(partial(orig_forward), *args, use_reentrant=False)  # kwargs avoided; use partial if needed
         model.forward = wrapped_forward
-        return model
-    
+        return model 
     def build_network_architecture(self, device:torch.device) -> torch.nn.Module:
         model = super().build_network_architecture(device=device).to(device=device)
 
@@ -202,3 +274,30 @@ network_registry = {
     'nnInteractiveUNetTrainNorm': make_factory(nnInteractiveUNetInstanceNorm),
     'nnInteractiveUNetTrainFILM': make_factory(nnInteractiveUNetFILM),
 }
+
+class CheckpointedModule(nn.Module):
+    def __init__(self, module):
+        super().__init__()
+        self.module = module
+    
+    def forward(self, *args, **kwargs):
+        return checkpoint(self.module, *args, use_reentrant=False, **kwargs)
+
+def apply_selective_checkpoint(self, model):
+    expensive_blocks = [
+        '1.blocks.0', '1.blocks.1', '1.blocks.2',
+        '2.blocks.0',
+    ]
+    
+    for block_path in expensive_blocks:
+        try:
+            block = model.get_submodule(block_path)
+            # Replace the block with a checkpointed version
+            parent_path, block_name = block_path.rsplit('.', 1)
+            parent = model.get_submodule(parent_path) if parent_path else model
+            setattr(parent, block_name, CheckpointedModule(block))
+            print(f"✓ Checkpointed {block_path}")
+        except Exception as e:
+            print(f"✗ Failed to checkpoint {block_path}: {e}")
+    
+    return model
