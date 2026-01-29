@@ -685,10 +685,7 @@ class Prototype_Static_Planner:
             },
             'wrapper_config': { #This is a wrapper around the base loss to handle the refinement process. 
                 'used_outputs': 'all',
-                'merge_strategy': 'mean', #Could be 'mean', 'sum', 'weighted_sum' etc.
-                'early_exit_padding_strategy': 'Unpadded' #Could be None (i,e, don't pad and just use the actual ones),
-                # 'last' (i.e. pad using the last loss value), just intended for batch size > 1 where different 
-                #samples may have different number of interactions. 
+                'merge_strategy': 'mean', #Could be 'mean', 'sum', 'weighted_sum', latter 2 not supported.
                 } 
             } #Currently static, no special treatment for now.
 

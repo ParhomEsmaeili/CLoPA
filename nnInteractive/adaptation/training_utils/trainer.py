@@ -184,6 +184,8 @@ class Trainer:
             loss_dict = dict()
             per_iter_metric_dict = dict() #Initialise the metric dict for this batch which stores per-iter metrics.
 
+
+            ############################# IGNORE ###########################################
             #First we simulate a prompt synthesis step (or lackthereof) to create the input to the network. 
 
             #First an initialisation. #NOTE: Future work may make it so that we can dynamically change the distribution of the
@@ -203,6 +205,10 @@ class Trainer:
             #             batch_data[key] = batch_data[key][non_empty_samples]
             
             #Now we have filtered out empty samples a-priori.
+            
+            #####################################################################################
+
+
             gt = batch_data['label'].to(dtype=torch.int8) #.to(device=self.device, dtype=torch.int8)
             image = batch_data['image']#.to(device=self.device)
             
@@ -233,12 +239,23 @@ class Trainer:
                 output=output,
                 target=gt.to(device=self.device)
                 )
+            if self.loss_wrapper_conf['used_outputs'] == 'all':
+                loss = self.call_backwards(loss, num_iter=self.train_inner_loop_conf['max_edit_interactions'] + 1) #+1 for the initial prediction.
+            else:
+                raise NotImplementedError("Only 'all' used_outputs supported currently in loss wrapper!")
+            
+            assert isinstance(loss, torch.Tensor) or type(loss) == type(None), "Loss after backwards call must be a single tensor value!"        
             torch.cuda.empty_cache() #This is getting a bit annoying.......
-
+            
             #Now lets calculate the loss for the initial prediction.
             loss_dict.update(
                 {
-                init: {idx: val for idx, val in loss.items()} #Initially, the correspondence is
+                init: loss 
+                #NOTE: We have changed to a manner which handles the loss backwards with grad accumulation
+                #so we will only have a single loss value without a computation graph now, we store this
+                #for logging on the final optimiser step. 
+
+                #{idx: val for idx, val in loss.items()} #Initially, the correspondence is
                 #fully 1-to-1 between original and current batch indices.
                 }
             )
@@ -286,7 +303,7 @@ class Trainer:
                         batchwise_final_pred        
                 ) 
             if len(propagated_preds) != 0: #Now we enter the editing loops if there are still samples to edit.
-                for i in range(self.train_inner_loop_conf['max_interactions']):
+                for i in range(self.train_inner_loop_conf['max_edit_interactions']):
                     
                     input_prompts, input_prompts_lbs = self.train_prompters['Interactive Edit'](
                         data={
@@ -310,12 +327,18 @@ class Trainer:
                         output=output,
                         target=gt.to(device=self.device)
                         )
-                    torch.cuda.empty_cache() #This is getting a bit annoying.......
+                    if self.loss_wrapper_conf['used_outputs'] == 'all':
+                        loss = self.call_backwards(loss, num_iter=self.train_inner_loop_conf['max_edit_interactions'] + 1) #+1 for the initial prediction.
+                    else:
+                        raise NotImplementedError("Only 'all' used_outputs supported currently in loss wrapper!")
 
+                    assert isinstance(loss, torch.Tensor) or type(loss) == type(None), "Loss after backwards call must be a single tensor value!"
+                    torch.cuda.empty_cache() #This is getting a bit annoying.......
+            
                     #Now lets calculate the loss for the initial prediction.
                     loss_dict.update(
                         { #We reindex according to the propagated preds original indices.
-                        f'Interactive Edit Iter {i}': {orig_idx: loss[current_idx] for current_idx, orig_idx in propagated_preds.items()}
+                        f'Interactive Edit Iter {i}': loss #{orig_idx: loss[current_idx] for current_idx, orig_idx in propagated_preds.items()}
                         }
                     )
                     output = output.clone().detach()
@@ -357,14 +380,11 @@ class Trainer:
             else:
                 pass #Samples are all finished, so we can't loop, just calculate the metric.
 
-            #Call on a function which updates the parameters based on the loss dict. This is effectively the 
-            #wrapper around the base loss, and dictates how we should update the parameters based on the unrolled
-            #set of interaction states. 
-            self.update_parameters(loss_dict, batch_size=batch_data['label'].shape[0])
-            #Here we use the batch size which corresponds to the a-priori filtered empty samples. NOT the 
-            #gt which can be updated during early-exit, as the a-priori filtering has necessitated that
-            #at least the first inference callback is always run for all samples in the batch.
+            #Call on a function which updates the parameters based on the accum gradients, and stores
+            #the value of the total actual loss used for the update.
 
+            self.update_parameters(loss_dict) #, batch_size=batch_data['label'].shape[0])
+            
             #This is for metrics which are calculated per iteration. 
 
             #NOTE: We expect that the outputted metrics be a batchlength tensor of values for each metric.    
@@ -462,37 +482,39 @@ class Trainer:
         del per_iter_metric_dict
         torch.cuda.empty_cache() #This is getting a bit annoying.......
 
-    def update_parameters(
-        self, 
-        loss_dict: dict,
-        batch_size: int):
+    def call_backwards(self, loss: torch.Tensor, num_iter: int):
         #Selected losses to merge:
-        if self.loss_wrapper_conf['used_outputs'] == 'all': #Use all per-iter outputs.
-            used_losses = {
-                i: [loss[i] for loss in loss_dict.values() if i in loss.keys()] for i in range(batch_size)
-            }
-        else:
-            raise NotImplementedError("Only 'all' used_outputs supported currently in loss wrapper!")
-        
-        #Padding strategy: 
-        if self.loss_wrapper_conf['early_exit_padding_strategy'] == 'Unpadded':
-            pass #Do nothing.
-        else:
-            raise NotImplementedError("Only 'Unpadded' early exit padding strategy supported currently in loss wrapper!")
+        # if self.loss_wrapper_conf['used_outputs'] == 'all': #Use all per-iter outputs.
+        #     # used_losses = {
+        #     #     i: [loss[i] for loss in loss_dict.values() if i in loss.keys()] for i in range(batch_size)
+        #     # }
+        # else:
+        #     raise NotImplementedError("Only 'all' used_outputs supported currently in loss wrapper!")
         
         #Merge strategy:
         if self.loss_wrapper_conf['merge_strategy'] == 'sum':
-            # total_loss = sum(used_losses)
             raise NotImplementedError("Sum merge strategy not implemented yet!")
         elif self.loss_wrapper_conf['merge_strategy'] == 'mean':
             #Lets take the mean on a per-sample basis, and then 
-            total_loss = torch.mean(
-                torch.stack(
-                    [torch.mean(torch.stack(used_losses[i])) for i in range(batch_size)]
-                    )
-                )
-        total_loss = total_loss.to(device=self.device) #Lets move this to the correct device for the update.
+            # total_loss = torch.mean(
+            #     torch.stack(
+            #         [torch.mean(torch.stack(used_losses[i])) for i in range(batch_size)]
+            #         )
+            #     )
+            total_loss = (1 / num_iter) * torch.mean(torch.stack(list(loss.values())))
+            total_loss = total_loss.to(device=self.device) #Lets move this to the correct device for the update.
         self.grad_scaler.scale(total_loss).backward()
+
+        return total_loss.detach().cpu() #We return the detached cpu value for logging.
+    def update_parameters(
+        self, 
+        loss_dict: dict):
+        # batch_size: int):
+        
+        total_loss = sum(loss_dict.values()) #Lets compute by applying the cumulative sum. 
+        #NOTE: We have not applied clipping here. This can be added in future if needed, e.g.:
+        # self.grad_scaler.unscale_(self.optimiser)
+        # torch.nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=1.0)
         self.grad_scaler.step(self.optimiser)
         self.grad_scaler.update()
         #Reset the gradients to avoid accumulation from previous step.
@@ -501,7 +523,7 @@ class Trainer:
             self.base_loss.name: total_loss
         }, self.global_iter_step) 
 
-        del total_loss
+        
         torch.cuda.empty_cache() #This is getting a bit annoying.......
 
     def validate(self, epoch_num):
@@ -604,7 +626,7 @@ class Trainer:
                         batchwise_final_pred        
                 ) 
             if len(propagated_preds) != 0: #Now we enter the editing loops if there are still samples to edit.
-                for i in range(self.val_inner_loop_conf['max_interactions']):
+                for i in range(self.val_inner_loop_conf['max_edit_interactions']):
                     
                     input_prompts, input_prompts_lbs = self.val_prompters['Interactive Edit'](
                         data={
@@ -1094,8 +1116,8 @@ class Trainer:
             raise RuntimeError("No used outputs specified found in loss wrapper config when setting up loss!")
         if loss_wrapper_conf.get('merge_strategy') is None:
             raise RuntimeError("No merge strategy specified found in loss wrapper config when setting up loss!")
-        if loss_wrapper_conf.get('early_exit_padding_strategy') is None:
-            raise RuntimeError("No early exit padding strategy specified found in loss wrapper config when setting up loss!")
+        # if loss_wrapper_conf.get('early_exit_padding_strategy') is None:
+        #     raise RuntimeError("No early exit padding strategy specified found in loss wrapper config when setting up loss!")
     
         self.loss_wrapper_conf = loss_wrapper_conf #Storing for use in loss calculation. 
 
@@ -1113,7 +1135,7 @@ class Trainer:
             ) for mode, conf in prompter_plans['mode_configs'].items()}
             
             self.train_inner_loop_conf = {
-                'max_interactions': prompter_plans['num_loop'],
+                'max_edit_interactions': prompter_plans['num_loop'],
             }
 
         elif plan_type == 'val_handlers':
@@ -1128,7 +1150,7 @@ class Trainer:
             ) for mode, conf in prompter_plans['mode_configs'].items()}
             
             self.val_inner_loop_conf = {
-                'max_interactions': prompter_plans['num_loop'],
+                'max_edit_interactions': prompter_plans['num_loop'],
             }
         else:
             raise RuntimeError(f"Unknown plan type {plan_type} when setting up prompter!")

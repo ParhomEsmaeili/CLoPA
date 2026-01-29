@@ -18,6 +18,7 @@ class CheckpointedModule(nn.Module):
 
     def forward(self, *args):
         # only positional tensor args; avoid non-tensor kwargs here
+        print(f"[CHECKPOINT] Running {self.module.__class__.__name__}") 
         return checkpoint(self.module, *args, use_reentrant=self.use_reentrant)
 
 
@@ -115,8 +116,11 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
         self.current_kwargs = current_kwargs
 
     def apply_forward_checkpoint(self, model):
-        network_structure = ['decoder','stages']
-        if not network_structure[-1] == 'stages':
+        # network_structure = [['encoder','decoder'],[[['stages', 'stages'], ['0','1','2','3','4','5']], [['stages']]]]
+        # network_structure = [['encoder','decoder'],[[['stages', 'stages', 'stages', 'stages', 'stages'], ['0','1','2','3','4','5']], [['stages']]]]
+        network_structure = [['decoder'],[[['stages']]]]
+        
+        if not all(i[0][0] == 'stages' for i in network_structure[1]):
             raise NotImplementedError("Only implemented for 'stages' network structure.") 
             
         #Lets only checkpoint the decoder for now as the skip connections
@@ -128,8 +132,10 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
         #Now at the intra-level we can assign blocks which we will checkpoint.
 
         #Lets assign the blocks within a "level" which can be checkpointed also.
-        encoder_blocks = ['blocks', 'conv'] #nnu-net uses the same overall naming convention within
-        decoder_blocks = ['convs', 'conv'] #nnu-net uses the same overall naming convention within
+        # encoder_blocks = ['blocks', ['conv1', 'conv2', 'conv3', 'skip']] #nnu-net uses the same overall naming convention within
+        encoder_blocks = ['blocks']
+
+        decoder_blocks = ['convs', ['conv']] #nnu-net uses the same overall naming convention within
         #a block, so we can use this to iterate over the blocks and checkpoint specific layers.
         if encoder_blocks[0] != 'blocks' or decoder_blocks[0] != 'convs':
             raise NotImplementedError("Only implemented for 'blocks' and 'convs' intra-level structure.")
@@ -143,45 +149,81 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
             #we create a list which tracks at each level if we have matched a module.
             if len(parts) < len(network_structure):
                 continue #Too short to match.
+            #Now lets iterate over the encoder/decoder structure.
+            for idx, struct in enumerate(network_structure[0]):
+                if struct == 'decoder':
+                    dummy_network_structures = [[struct] + network_structure[1][idx][0]]
+                elif struct == 'encoder':
+                    # This was for looking within each block within the stage.
+                    dummy_network_structures = [[struct] + [i, j] for i, j in zip(network_structure[1][idx][0], network_structure[1][idx][1])]
+                   
+                else:
+                    raise ValueError("Unknown network structure for checkpointing.")
+                
+                for dummy_network_structure in dummy_network_structures:
+                    if len(parts) < len(dummy_network_structure):
+                        continue #Too short to match.
+                    structure_checker = [parts[i] == dummy_network_structure[i] for i in range(len(dummy_network_structure))]
+                    if not all(structure_checker):
+                        continue
+                    
+                    #If structure matches now we look at intra level
+                    if dummy_network_structure[0] == 'decoder':
+                        look_here = decoder_blocks
+                    elif dummy_network_structure[0] == 'encoder':
+                        look_here = encoder_blocks
+                    else:
+                        raise ValueError("Unknown network structure for checkpointing.")
+                    blockparts = parts[len(dummy_network_structure):]
 
-            structure_checker = [parts[i] == network_structure[i] for i in range(len(network_structure))]
-            if not all(structure_checker):
-                continue
-            
-            #If structure matches now we look at intra level
-            if network_structure[0] == 'decoder':
-                look_here = decoder_blocks
-            elif network_structure[0] == 'encoder':
-                look_here = encoder_blocks
-            else:
-                raise ValueError("Unknown network structure for checkpointing.")
-            blockparts = parts[len(network_structure):]
+                    if dummy_network_structure[0] == 'decoder':
+                        if len(blockparts) != 2 * len(look_here): #Stages have indexing, and so do the blocks within
+                            #each level.
+                            continue #Not the right level to match, either too coarse or too granular. 
+                    elif dummy_network_structure[0] == 'encoder':
+                        #Here we actually are going to checkpoint entire blocks so we need to 
+                        #adjust our granularity.
+                        if len(blockparts) != len(look_here) + 1: #Stages have indexing, and so do the blocks within
+                            #each level. We are going to be looking at entire blocks here, nothing more granular.
+                            continue #Not the right level to match, either too coarse or too granular.
 
-            if len(blockparts) != 2 * len(look_here): #Stages have indexing, and so do the blocks within
-                #each level.
-                continue #Not the right level to match, either too coarse or too granular. 
-            
-            # #Lets look past indexing of the stages.
-            # if blockparts[1] != look_here[0]:
-            #     continue
-            # #Within the block, we also have indexing of conv blocks.
-            # if blockparts[2] != look_here[1]:
-            #     continue
-            #We wrap both checks into one for loop.
-            intra_tracker = [blockparts[i * 2 + 1] == look_here[i] for i in range(len(look_here))]
-            if not all(intra_tracker):
-                continue
-            else:
-                #We have a match, we will checkpoint this module's forward pass.
-                try:
-                    block = model.get_submodule(name)
-                    # Replace the block with a checkpointed version
-                    parent_path, block_name = name.rsplit('.', 1)
-                    parent = model.get_submodule(parent_path) if parent_path else model
-                    setattr(parent, block_name, CheckpointedModule(block, use_reentrant=False))
-                    print(f"✓ Checkpointed {name}")
-                except Exception as e:
-                    print(f"✗ Failed to checkpoint {name}: {e}")
+                    # #Lets look past indexing of the stages.
+                    # if blockparts[1] != look_here[0]:
+                    #     continue
+                    # #Within the block, we also have indexing of conv blocks.
+                    # if blockparts[2] != look_here[1]:
+                    #     continue
+                    #We wrap both checks into one for loop.
+                    if struct == 'encoder':
+                        #This old tracker was for checkpointing within each block within a stage.
+                        # intra_tracker = [blockparts[i * 2] in look_here[i] for i in range(len(look_here))]
+                        intra_tracker = [blockparts[0] == look_here[0]] #We checkpoint entire blocks here. 
+                    elif struct == 'decoder':
+                        intra_tracker = [blockparts[i * 2 + 1] in look_here[i] for i in range(len(look_here))]
+                    if not all(intra_tracker):
+                        continue
+                    else:
+                        #We have a match, we will checkpoint this module's forward pass.
+                        try:
+                            block = model.get_submodule(name)
+                            # # Replace the block with a checkpointed version
+                            # parent_path, block_name = name.rsplit('.', 1)
+                            # parent = model.get_submodule(parent_path) if parent_path else model
+                            # setattr(parent, block_name, CheckpointedModule(block, use_reentrant=False))
+                            # print(f"✓ Checkpointed {name}")
+                            # Capture ORIGINAL forward before ANY replacement
+                            original_forward = block.__class__.forward.__get__(block, block.__class__)
+                            
+                            # Now replace with checkpointed version
+                            def make_checkpointed(orig, block_name):
+                                def forward_fn(*args, **kwargs):
+                                    print(f"[CHECKPOINT] Running checkpointed {block_name}")
+                                    return checkpoint(orig, *args, use_reentrant=False, **kwargs)
+                                return forward_fn
+                            
+                            block.forward = make_checkpointed(original_forward, name)
+                        except Exception as e:
+                            print(f"✗ Failed to checkpoint {name}: {e}")
 
             
         return model
@@ -214,7 +256,7 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
         #Lets try and checkpoint some operations so that we don't run out of VRAM....
         #slower but at least it won't BREAK. This will need to overwrite the forward function of
         #the prior model though, which is annoying. 
-        model = self.apply_forward_checkpoint(model)
+        # model = self.apply_forward_checkpoint(model)
         return model 
     
     def load_weights(self, device:torch.device, model, network_weights) -> torch.nn.Module:
@@ -274,30 +316,3 @@ network_registry = {
     'nnInteractiveUNetTrainNorm': make_factory(nnInteractiveUNetInstanceNorm),
     'nnInteractiveUNetTrainFILM': make_factory(nnInteractiveUNetFILM),
 }
-
-class CheckpointedModule(nn.Module):
-    def __init__(self, module):
-        super().__init__()
-        self.module = module
-    
-    def forward(self, *args, **kwargs):
-        return checkpoint(self.module, *args, use_reentrant=False, **kwargs)
-
-def apply_selective_checkpoint(self, model):
-    expensive_blocks = [
-        '1.blocks.0', '1.blocks.1', '1.blocks.2',
-        '2.blocks.0',
-    ]
-    
-    for block_path in expensive_blocks:
-        try:
-            block = model.get_submodule(block_path)
-            # Replace the block with a checkpointed version
-            parent_path, block_name = block_path.rsplit('.', 1)
-            parent = model.get_submodule(parent_path) if parent_path else model
-            setattr(parent, block_name, CheckpointedModule(block))
-            print(f"✓ Checkpointed {block_path}")
-        except Exception as e:
-            print(f"✗ Failed to checkpoint {block_path}: {e}")
-    
-    return model
