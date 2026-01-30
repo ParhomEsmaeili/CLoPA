@@ -104,16 +104,23 @@ class Trainer:
         #Now let us update the gt, pred and image tensors to remove the finished samples.
         #NOTE: We must do it like this otherwise constantly re-indexing will make things confused.
 
-        #We will do it by only retaining the non-finished samples. 
-        gt = gt[torch.tensor(list(propagated_preds.keys())), :, :, :, :]
-        image = image[torch.tensor(list(propagated_preds.keys())), :, :, :, :]
-        output= output[torch.tensor(list(propagated_preds.keys())), :, :, :, :]
+        #We will do it by only retaining the non-finished samples.
+        if len(propagated_preds) == 0:
+            torch.cuda.empty_cache() #This is getting a bit annoying.......
+            return None, None, None, propagated_preds, batchwise_final_pred #We have finished all samples,
+        #we cannot proceed anymore, return None to indicate this on gt, output, image. 
+        # We only return the batchwise final pred and propagated preds.
+        else:
+            gt = gt[torch.tensor(list(propagated_preds.keys())), :, :, :, :]
+            image = image[torch.tensor(list(propagated_preds.keys())), :, :, :, :]
+            output= output[torch.tensor(list(propagated_preds.keys())), :, :, :, :]
 
-        #update the indices 
-        propagated_preds = {new_idx: original_idx for new_idx, (_, original_idx) in enumerate(propagated_preds.items())}
-    
-        torch.cuda.empty_cache() #This is getting a bit annoying.......
-        return output, gt, image, propagated_preds, batchwise_final_pred
+            #update the indices 
+            propagated_preds = {new_idx: original_idx for new_idx, (_, original_idx) in enumerate(propagated_preds.items())}
+        
+            torch.cuda.empty_cache() #This is getting a bit annoying.......
+            
+            return output, gt, image, propagated_preds, batchwise_final_pred
 
     @torch.inference_mode()
     def forward_eval(self, input_image, input_prompts, input_prompts_lbs, prev_pred = None, initialise=False, propagated_preds=None):
@@ -301,7 +308,7 @@ class Trainer:
                         image, 
                         propagated_preds, 
                         batchwise_final_pred        
-                ) 
+                )
             if len(propagated_preds) != 0: #Now we enter the editing loops if there are still samples to edit.
                 for i in range(self.train_inner_loop_conf['max_edit_interactions']):
                     
@@ -375,10 +382,13 @@ class Trainer:
                     
                     if len(propagated_preds) == 0:
                         #All samples have finished, we can break out of the interaction loop.
+                        assert gt == None and image == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
                         break
                 
             else:
-                pass #Samples are all finished, so we can't loop, just calculate the metric.
+                assert image == None and gt == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
+                #This is a sanity check.
+                #Samples are all finished, so we can't loop, just calculate the metric.
 
             #Call on a function which updates the parameters based on the accum gradients, and stores
             #the value of the total actual loss used for the update.
