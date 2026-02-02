@@ -212,7 +212,7 @@ class DiceAUCMetric:
         #We will assert that the batch size is non-increasing. 
         if any(
             torch.isnan(torch.tensor(per_iter_metrics[b_idx][i])) and not torch.isnan(torch.tensor(per_iter_metrics[b_idx][i+1]))
-            for i in range(len(per_iter_metrics)-1)
+            for i in range(len(infer_call_names_order)-1)
             for b_idx in range(batchsize)
         ):
             raise ValueError("Batch size must be non-increasing over iterations for DiceAUCMetric calculation.")
