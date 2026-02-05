@@ -271,48 +271,165 @@ class nnInteractiveUNetInstanceNorm(nnInteractiveUNet):
         
         return model.to(device=device)
 
-class nnInteractiveUNetFILM:
-    '''
-    nnInteractiveUNetFILM only adjusts the FILM parameters.
-    '''
-    def __init__(self, existing_kwargs:dict | None, current_kwargs:dict):
-        #With film, we are adjusting the architecture slightly, so we cannot use super init.
-        self.existing_kwargs = existing_kwargs #We store it here, so that we can use it for building the network,
-        #but we do not use it in the super init as this would break the upstream class initialisation. 
-        self.current_kwargs = current_kwargs
+# class nnInteractiveUNetFILM(nnInteractiveUNet):
+#     '''
+#     nnInteractiveUNetInstanceNorm only adjusts the affine parameters on the instance norm layers.
+#     '''
+#     def __init__(self, existing_kwargs:dict | None, current_kwargs:dict):
+#         super().__init__(existing_kwargs=None, current_kwargs=current_kwargs)
+#         #Existing kwargs are ignored for now because its the same network, just with batchnorm layers.
+#         self.existing_kwargs = existing_kwargs #We store it here, so that we can use it for building the network,
+#         #but we do not use it in the super init as this would break the upstream class initialisation. 
+#         self.current_kwargs = current_kwargs
 
-    def build_network_architecture(self, device:torch.device) -> torch.nn.Module:
-        raise NotImplementedError("nnInteractiveUNetFILM build_network_architecture is not implemented yet.") 
-        #This needs to take the existing nnUNet architecture and modify it to add FILM layers.
+#     # def apply_forward_checkpoint(self, model):
+#     #     # network_structure = [['encoder','decoder'],[[['stages', 'stages'], ['0','1','2','3','4','5']], [['stages']]]]
+#     #     # network_structure = [['encoder','decoder'],[[['stages', 'stages', 'stages', 'stages', 'stages'], ['0','1','2','3','4','5']], [['stages']]]]
+#     #     network_structure = [['decoder'],[[['stages']]]]
+        
+#     #     if not all(i[0][0] == 'stages' for i in network_structure[1]):
+#     #         raise NotImplementedError("Only implemented for 'stages' network structure.") 
+            
+#     #     #Lets only checkpoint the decoder for now as the skip connections
+#     #     #will make it more memory intensive.
 
-        # model = film.build_network_architecture(device=device).to(device=device)
+#     #     #Lets assign a set of "levels" which we will permit checkpointing within. Even then, we will
+#     #     #not probably checkpoint the entire block, just the most memory intensive activations. 
+        
+#     #     #Now at the intra-level we can assign blocks which we will checkpoint.
 
-        # for name, module in model.named_modules():
-        #     if 'film' in name.lower():
-        #         for param in module.parameters():
-        #             param.requires_grad = True
-        #     else:
-        #         for param in module.parameters():
-        #             param.requires_grad = False
-        # return model 
+#     #     #Lets assign the blocks within a "level" which can be checkpointed also.
+#     #     # encoder_blocks = ['blocks', ['conv1', 'conv2', 'conv3', 'skip']] #nnu-net uses the same overall naming convention within
+#     #     encoder_blocks = ['blocks']
+
+#     #     decoder_blocks = ['convs', ['conv']] #nnu-net uses the same overall naming convention within
+#     #     #a block, so we can use this to iterate over the blocks and checkpoint specific layers.
+#     #     if encoder_blocks[0] != 'blocks' or decoder_blocks[0] != 'convs':
+#     #         raise NotImplementedError("Only implemented for 'blocks' and 'convs' intra-level structure.")
+        
+
+#     #     #it is not consistent between the encoder and decoder though, so we need to be careful.
+        
+#     #     for name, module in model.named_modules():
+#     #         parts = name.split('.') #Lets split by dot to get the module hierarchy.
+#     #         #We will filter valid modules by order of hierarchy.
+#     #         #we create a list which tracks at each level if we have matched a module.
+#     #         if len(parts) < len(network_structure):
+#     #             continue #Too short to match.
+#     #         #Now lets iterate over the encoder/decoder structure.
+#     #         for idx, struct in enumerate(network_structure[0]):
+#     #             if struct == 'decoder':
+#     #                 dummy_network_structures = [[struct] + network_structure[1][idx][0]]
+#     #             elif struct == 'encoder':
+#     #                 # This was for looking within each block within the stage.
+#     #                 dummy_network_structures = [[struct] + [i, j] for i, j in zip(network_structure[1][idx][0], network_structure[1][idx][1])]
+                   
+#     #             else:
+#     #                 raise ValueError("Unknown network structure for checkpointing.")
+                
+#     #             for dummy_network_structure in dummy_network_structures:
+#     #                 if len(parts) < len(dummy_network_structure):
+#     #                     continue #Too short to match.
+#     #                 structure_checker = [parts[i] == dummy_network_structure[i] for i in range(len(dummy_network_structure))]
+#     #                 if not all(structure_checker):
+#     #                     continue
+                    
+#     #                 #If structure matches now we look at intra level
+#     #                 if dummy_network_structure[0] == 'decoder':
+#     #                     look_here = decoder_blocks
+#     #                 elif dummy_network_structure[0] == 'encoder':
+#     #                     look_here = encoder_blocks
+#     #                 else:
+#     #                     raise ValueError("Unknown network structure for checkpointing.")
+#     #                 blockparts = parts[len(dummy_network_structure):]
+
+#     #                 if dummy_network_structure[0] == 'decoder':
+#     #                     if len(blockparts) != 2 * len(look_here): #Stages have indexing, and so do the blocks within
+#     #                         #each level.
+#     #                         continue #Not the right level to match, either too coarse or too granular. 
+#     #                 elif dummy_network_structure[0] == 'encoder':
+#     #                     #Here we actually are going to checkpoint entire blocks so we need to 
+#     #                     #adjust our granularity.
+#     #                     if len(blockparts) != len(look_here) + 1: #Stages have indexing, and so do the blocks within
+#     #                         #each level. We are going to be looking at entire blocks here, nothing more granular.
+#     #                         continue #Not the right level to match, either too coarse or too granular.
+
+#     #                 # #Lets look past indexing of the stages.
+#     #                 # if blockparts[1] != look_here[0]:
+#     #                 #     continue
+#     #                 # #Within the block, we also have indexing of conv blocks.
+#     #                 # if blockparts[2] != look_here[1]:
+#     #                 #     continue
+#     #                 #We wrap both checks into one for loop.
+#     #                 if struct == 'encoder':
+#     #                     #This old tracker was for checkpointing within each block within a stage.
+#     #                     # intra_tracker = [blockparts[i * 2] in look_here[i] for i in range(len(look_here))]
+#     #                     intra_tracker = [blockparts[0] == look_here[0]] #We checkpoint entire blocks here. 
+#     #                 elif struct == 'decoder':
+#     #                     intra_tracker = [blockparts[i * 2 + 1] in look_here[i] for i in range(len(look_here))]
+#     #                 if not all(intra_tracker):
+#     #                     continue
+#     #                 else:
+#     #                     #We have a match, we will checkpoint this module's forward pass.
+#     #                     try:
+#     #                         block = model.get_submodule(name)
+#     #                         # # Replace the block with a checkpointed version
+#     #                         # parent_path, block_name = name.rsplit('.', 1)
+#     #                         # parent = model.get_submodule(parent_path) if parent_path else model
+#     #                         # setattr(parent, block_name, CheckpointedModule(block, use_reentrant=False))
+#     #                         # print(f"✓ Checkpointed {name}")
+#     #                         # Capture ORIGINAL forward before ANY replacement
+#     #                         original_forward = block.__class__.forward.__get__(block, block.__class__)
+                            
+#     #                         # Now replace with checkpointed version
+#     #                         def make_checkpointed(orig, block_name):
+#     #                             def forward_fn(*args, **kwargs):
+#     #                                 print(f"[CHECKPOINT] Running checkpointed {block_name}")
+#     #                                 return checkpoint(orig, *args, use_reentrant=False, **kwargs)
+#     #                             return forward_fn
+                            
+#     #                         block.forward = make_checkpointed(original_forward, name)
+#     #                     except Exception as e:
+#     #                         print(f"✗ Failed to checkpoint {name}: {e}")
+
+            
+#     #     return model
     
-    def load_weights(self, device:torch.device, model, network_weights) -> torch.nn.Module:
-        raise NotImplementedError("nnInteractiveUNetFILM load_weights is not implemented yet.") 
-        #This needs to take the existing nnUNet weights and load them into the modified FILM architecture, i.e. in the non-FILM layers. 
+#     # def apply_forward_checkpoint_test_orig(self, model):
+#     #     orig_forward = model.forward
+#     #     def wrapped_forward(*args):
+#     #         return checkpoint(partial(orig_forward), *args, use_reentrant=False)  # kwargs avoided; use partial if needed
+#     #     model.forward = wrapped_forward
+#     #     return model 
+    
+#     def build_network_architecture(self, device:torch.device) -> torch.nn.Module:
+#         model = super().build_network_architecture(device=device).to(device=device)
 
-        # model.load_state_dict(
-        #     network_weights
-        # )
-        # #NORMALLY we would need to add some additional logic to figure out where to load the weights but 
-        # #in this case its just the same architecture so we can directly load them.
-        # network_weights = None #Free up memory.
-        # torch.cuda.empty_cache()
+#         # First, freeze ALL parameters in the entire model
+#         for param in model.parameters():
+#             param.requires_grad = False
+        
+#         #TODO: Checkpointing? 
+
+#         #Now add the FILM parameters.
+#         return model 
+    
+#     def load_weights(self, device:torch.device, model, network_weights) -> torch.nn.Module:
+#         model.load_state_dict(
+#             network_weights
+#         )
+#         #NORMALLY we would need to add some additional logic to figure out where to load the weights but 
+#         #in this case its just the same architecture so we can directly load them.
+#         network_weights = None #Free up memory.
+#         torch.cuda.empty_cache()
         
         
-        # return model.to(device=device) 
+#         return model.to(device=device)
+    
+
 network_registry = {
     'nnInteractiveUNet': make_factory(nnInteractiveUNet),
     'nnInteractiveUNetFrozen': make_factory(nnInteractiveUNetFrozen),
     'nnInteractiveUNetTrainNorm': make_factory(nnInteractiveUNetInstanceNorm),
-    'nnInteractiveUNetTrainFILM': make_factory(nnInteractiveUNetFILM),
+    # 'nnInteractiveUNetTrainFILM': make_factory(nnInteractiveUNetFILM),
 }

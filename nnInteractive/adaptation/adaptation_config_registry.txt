@@ -62,7 +62,7 @@
 	"adapt_prototype_2":{
 		"adaptation_planner":
 			{
-				"planner_registry_name": "Prototype_Static_Planner_TrainFILM",
+				"planner_registry_name": "Prototype_Static_Planner_TrainNorm_AmendedAug",
 				"planner_config": {
                 }	
 			},

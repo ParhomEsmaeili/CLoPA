@@ -51,7 +51,7 @@ class RandConditionalScaling(RandomizableTransform, LazyTransform):
         self.iso = RandAffined(
             keys=keys,
             prob=1.0,
-            scale_range=scale_range_iso,
+            scale_range=[i - 1 for i in scale_range_iso], #Why the hell did monai force me to do this.  
             mode=mode,
             padding_mode=padding_mode,
             lazy=lazy
@@ -60,7 +60,7 @@ class RandConditionalScaling(RandomizableTransform, LazyTransform):
         self.aniso = RandAffined(
             keys=keys,
             prob=1.0,
-            scale_range=scale_range_aniso,
+            scale_range=[[j - 1 for j in i] for i in scale_range_aniso],
             mode=mode,
             padding_mode=padding_mode,
             lazy=lazy
