@@ -368,8 +368,8 @@ class Trainer:
 
                     #Here we check if we should early exit, we terminate a sample if the segmentation perfectly aligns.
                     
-                    #IF there is an finished sample then we will need to filter it. 
-                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0].cpu()
+                    #IF there is a finished sample then we will need to filter it. 
+                    finished_samples = (torch.sum((output.argmax(axis=1).unsqueeze(axis=1) == gt.to(device=self.device)).int(), dim=[1,2,3,4]) == gt.shape[2]*gt.shape[3]*gt.shape[4]).nonzero(as_tuple=True)[0]
                     #Now we need to index into the batchwise final pred to place the finished samples.
                     if len(finished_samples) > 0:
                         output, gt, image, propagated_preds, batchwise_final_pred = self.filter_finished_samples(
@@ -382,19 +382,11 @@ class Trainer:
                     
                     if len(propagated_preds) == 0:
                         #All samples have finished, we can break out of the interaction loop.
-                        assert gt == None and image == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
                         break
                 
             else:
-                assert image == None and gt == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
-                #This is a sanity check.
-                #Samples are all finished, so we can't loop, just calculate the metric.
+                pass #Samples are all finished, so we can't loop, just calculate the metric.
 
-            #Call on a function which updates the parameters based on the accum gradients, and stores
-            #the value of the total actual loss used for the update.
-
-            self.update_parameters(loss_dict) #, batch_size=batch_data['label'].shape[0])
-            
             #This is for metrics which are calculated per iteration. 
 
             #NOTE: We expect that the outputted metrics be a batchlength tensor of values for each metric.    
@@ -983,7 +975,37 @@ class Trainer:
             return [(name, param) for (name, param) in self.network.named_parameters() if param.requires_grad]
         elif self.network_architecture == 'nnInteractiveUNet':
             return self.network.parameters()
+        elif self.network_architecture == 'nnInteractiveUNetTrainConvNorm':
+            #we split the params into different groups.
+            #We have to take a hacky approach here, to save time, as the naming convention in nnu-net blocks
+            #are a bit cumbersome to deal with using the name of the module alone. 
+            groups = {
+                'conv_encoder': ['conv', 'stem'],      # conv AND stem
+                'conv_decoder': ['seg_layers'],         # only seg_layers
+                'norm': ['norm']
+                }
+            result = {}
+            for group_name, substrings in groups.items():
+                result[group_name] = []
+                for name, param in self.network.named_parameters():
+                    if not param.requires_grad:
+                        continue
+                        
+                    # Filter 1: Check if all required substrings are in the name
+                    if not all(substr in name for substr in substrings):
+                        continue
+                        
+                    # Filter 2: Check the module type matches the group
+                    module_name = name.rsplit('.', 1)[0]
+                    module = self.network.get_submodule(module_name)
+                    
+                    # Only Conv3d for conv_* groups, only InstanceNorm3d for norm group
+                    if 'conv' in group_name and isinstance(module, nn.Conv3d):
+                        result[group_name].append((name, param))
+                    elif 'norm' in group_name and isinstance(module, nn.InstanceNorm3d):
+                        result[group_name].append((name, param))
 
+            return result
     def save_ckpt(self, is_best: bool, target_dir: str):
         #Saving the current training state to a checkpoint file in the tmp dir. 
         if self.network == None:
@@ -1047,13 +1069,36 @@ class Trainer:
         optimiser_conf = train_plans['optimisation_config']['optimiser']
 
         optimiser_factory = optimiser_registry.get(optimiser_conf['name'])
+        nested_conf = optimiser_conf.get('nested') 
+        assert nested_conf != None, 'We currently require the nested argument to be specified in the optimiser config, even if it is just set to False, to avoid ambiguity when checking for nested vs non-nested configs!'
         optimiser_params = copy.deepcopy(optimiser_conf['params'])
         #Append the network params to the optimiser params.
         params_to_optimise = self.extract_trainable_params()
-        optimiser_params['params']= params_to_optimise #Yes, different meaning of params here..., sorry.
-
+        assert isinstance(optimiser_params, dict), f"Optimiser params should be a dict, but got {type(optimiser_params)}!"
+        #Now we will check whether its a nested dict, i.e. different configs for different trainable param groups.
+        if nested_conf:
+            assert optimiser_conf.get('dummy_params') != None
+            final_params = dict()
+            final_params['params'] = []
+            # optimiser_params['params'] = dict() #We will add the different param groups under the 'params' key in the optimiser params dict, this is what the optimiser expects for nested param groups.
+            for group_name, group_params in params_to_optimise.items():
+                subdict = dict()
+                if group_name not in params_to_optimise.keys():
+                    raise RuntimeError(f"Group name {group_name} in optimiser config not found in extracted trainable params when setting up optimiser!")
+                subdict.update(optimiser_params[group_name])
+                #we add the base params.
+                #now we add the trainable params
+                subdict['params'] = group_params
+                #now we append this dict.
+                final_params['params'].append(subdict) #We add the params to optimise for this group into the optimiser params dict under the right group name.
+            final_params.update(optimiser_conf.get('dummy_params'))
+        else:
+            optimiser_params['params']= params_to_optimise #Yes, different meaning of params here..., sorry.
+            final_params = copy.deepcopy(optimiser_params)
+            del optimiser_params['params'] #We remove the original params key to avoid confusion, we have moved the trainable params into the final params dict now.
+            torch.cuda.empty_cache() #This is getting a bit annoying.......
         self.optimiser = optimiser_factory(
-                optimiser_params
+                final_params #optimiser_params
             )
         
         
@@ -1481,6 +1526,6 @@ class Trainer:
 
 
         self.network = None  #Freeing up memory.  
-        torch.cuda.empty_cache() 
+        torch.cuda.empty_cache()
 
 

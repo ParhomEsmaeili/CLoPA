@@ -88,5 +88,35 @@
 					"file_ext": ".nii.gz"
 				}
 		}
+	},
+	"adapt_prototype_3":{
+		"adaptation_planner":
+			{
+				"planner_registry_name": "Prototype_Static_Planner_TrainConvNorm",
+				"planner_config": {
+                }	
+			},
+		"adaptation_trigger_config": 
+			{
+				"criterion_config":{
+				"name": "static_fraction_interval",
+				"fraction": 0.25
+				},
+				"data_splitting_config": {
+				"name": "static_hold_out",
+				"fraction_train": 0.8
+				}
+			},
+		"data_handling_config":{
+				"dataset_constructor_config": {
+					"dataset_constructor":"ContinualPersistentDataset"
+				},
+				"io_operations_config": {
+					"compress":false,
+					"invert_orient":false,
+					"monai_reader": true,
+					"file_ext": ".nii.gz"
+				}
+		}
 	}
 }
