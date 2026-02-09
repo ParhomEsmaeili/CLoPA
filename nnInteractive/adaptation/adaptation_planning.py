@@ -1787,10 +1787,69 @@ class Prototype_Static_PlannerTrainConvNorm(Prototype_Static_PlannerFixedAug):
             }
         return algo_conf
 
+
+class ProtoType_Static_PlannerTrainNorm_AdamW1(Prototype_Static_PlannerFixedAug):
+    def __init__(self, planner_config):
+        super().__init__(planner_config) 
+
+    def determine_optimiser(
+        self,
+        meta_algorithm_state: dict,
+        app_parameters: dict,
+        split: list[str],
+        ) -> dict:
+        '''
+        This is a function which determines the optimiser for the training pipeline.
+        '''
+        optimiser_conf = {
+            'name': 'adamW',
+            'nested': False,
+            'params': {
+                'lr': 1e-3,
+                'betas': (0.9, 0.999),
+                'eps': 1e-08,
+                'weight_decay': 1e-5,
+                'amsgrad': False,
+                'foreach': None,
+                'maximize': False,
+                'capturable': False,
+                'differentiable': False,
+                'fused': None
+                }
+        }
+        
+        return optimiser_conf 
+    
+    def determine_algorithm_config(
+        self,
+        meta_algorithm_state: dict,
+        app_parameters: dict,
+        *args,
+        **kwargs
+        ) -> dict:
+        '''
+        Only thing we are adjusting for this is the model architecture to have trainable norm layers.
+        '''
+        #This pertains to the actual functionalities of the algorithm, which is more general than
+        #just training/validation.
+
+        #NOTE: For now, we are just using the same configuration but trying to make it more efficient
+        algo_conf = {
+            'input_encoding': 'nnInteractiveUNetEncoding',
+            'input_handling_configs': app_parameters.get('input_handling_configs'),
+            'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
+            #for now.
+            'model_architecture': 'nnInteractiveUNetTrainNorm', #'nnInteractiveUNet',
+            'network_configuration': app_parameters.get('network_configuration'),
+            }
+        return algo_conf
+    
+
 planner_registry = {
     'Prototype_Static_PlannerDebugAug': Prototype_Static_PlannerDebugAug,
     'Prototype_Static_PlannerFixedAug': Prototype_Static_PlannerFixedAug,
     'Prototype_Static_Planner_TrainNorm': Prototype_Static_PlannerTrainNorm,
     'Prototype_Static_Planner_TrainNorm_AmendedAug': ProtoType_Static_PlannerTrainNorm_AmendedAug,
     'Prototype_Static_Planner_TrainConvNorm': Prototype_Static_PlannerTrainConvNorm,
+    'Prototype_Static_Planner_TrainNorm_AdamW1': ProtoType_Static_PlannerTrainNorm_AdamW1,
 }
