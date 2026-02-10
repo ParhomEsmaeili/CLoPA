@@ -1690,7 +1690,90 @@ class ProtoType_Static_PlannerTrainNorm_AmendedAug(Prototype_Static_PlannerFixed
             }
         return algo_conf
 
+class Prototype_Static_PlannerTrainConv(Prototype_Static_PlannerFixedAug):
+    def __init__(self, planner_config):
+        super().__init__(planner_config) 
 
+    def determine_optimiser(
+        self,
+        meta_algorithm_state: dict,
+        app_parameters: dict,
+        split: list[str],
+        ) -> dict:
+        '''
+        This is a function which determines the optimiser for the training pipeline.
+        '''
+        optimiser_conf = {
+            'name': 'adam',
+            'nested': True, #We want to use nested optimisers here to have different learning rates for the conv and norm layers.
+            'dummy_params': {
+                    'lr':0.00001, 
+                    'betas': (0.9, 0.999), 
+                    'eps': 1e-08, 
+                    'weight_decay': 0, 
+                    'amsgrad': False, 
+                    'foreach': None, 
+                    'maximize': False, 
+                    'capturable': False,
+                    'differentiable': False, 
+                    'fused': None, 
+                    }, #We need to specify some dummy parameters here to initialize the optimisers, but these will be overridden by the nested optimiser parameters.
+            'params': {
+                'conv_encoder': {
+                    'lr': 1e-5,
+                    'betas': (0.9, 0.999),
+                    'eps': 1e-08,
+                    'weight_decay': 1e-5,
+                    'amsgrad': False,
+                    'foreach': None,
+                    'maximize': False,
+                    'capturable': False,
+                    'differentiable': False,
+                    'fused': None
+                },
+                'conv_decoder': {
+                    'lr': 1e-5,
+                    'betas': (0.9, 0.999),
+                    'eps': 1e-08, 
+                    'weight_decay': 1e-5,
+                    'amsgrad': False,
+                    'foreach': None,
+                    'maximize': False,
+                    'capturable': False,
+                    'differentiable': False,
+                    'fused': None
+                    }
+                
+            }
+        }
+
+        return optimiser_conf 
+    
+    def determine_algorithm_config(
+        self,
+        meta_algorithm_state: dict,
+        app_parameters: dict,
+        *args,
+        **kwargs
+        ) -> dict:
+        '''
+        Only thing we are adjusting for this is the model architecture to have trainable Conv and instance norm layers.
+        We are restricting the conv layers to be trainable in the stem and segmentation head. 
+        '''
+        #This pertains to the actual functionalities of the algorithm, which is more general than
+        #just training/validation.
+
+        #NOTE: For now, we are just using the same configuration but trying to make it more efficient
+        algo_conf = {
+            'input_encoding': 'nnInteractiveUNetEncoding',
+            'input_handling_configs': app_parameters.get('input_handling_configs'),
+            'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
+            #for now.
+            'model_architecture': 'nnInteractiveUNetTrainConv', #'nnInteractiveUNet',
+            'network_configuration': app_parameters.get('network_configuration'),
+            }
+        return algo_conf
+    
 class Prototype_Static_PlannerTrainConvNorm(Prototype_Static_PlannerFixedAug):
     def __init__(self, planner_config):
         super().__init__(planner_config) 
@@ -1850,6 +1933,7 @@ planner_registry = {
     'Prototype_Static_PlannerFixedAug': Prototype_Static_PlannerFixedAug,
     'Prototype_Static_Planner_TrainNorm': Prototype_Static_PlannerTrainNorm,
     'Prototype_Static_Planner_TrainNorm_AmendedAug': ProtoType_Static_PlannerTrainNorm_AmendedAug,
+    'Prototype_Static_Planner_TrainConv': Prototype_Static_PlannerTrainConv,
     'Prototype_Static_Planner_TrainConvNorm': Prototype_Static_PlannerTrainConvNorm,
     'Prototype_Static_Planner_TrainNorm_AdamW1': ProtoType_Static_PlannerTrainNorm_AdamW1,
 }

@@ -382,11 +382,15 @@ class Trainer:
                     
                     if len(propagated_preds) == 0:
                         #All samples have finished, we can break out of the interaction loop.
+                        assert gt == None and image == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
                         break
                 
             else:
-                pass #Samples are all finished, so we can't loop, just calculate the metric.
-
+                assert image == None and gt == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
+                #Samples are all finished, so we can't loop, just calculate the metric.
+            
+            #Putting this back in... somehow we deleted this by accident.
+            self.update_parameters(loss_dict) 
             #This is for metrics which are calculated per iteration. 
 
             #NOTE: We expect that the outputted metrics be a batchlength tensor of values for each metric.    
@@ -675,14 +679,16 @@ class Trainer:
                         )
                         
                     else:
-                        pass #No finished samples, do nothing. 
-                    
+                        pass
                     if len(propagated_preds) == 0:
+                        assert gt == None and image == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
                         #All samples have finished, we can break out of the interaction loop.
                         break
                 
             else:
-                pass #Samples are all finished, so we can't loop, just calculate the metric.
+                assert image == None and gt == None and output == None, "If no propagated preds remain, image, gt and output must all be None!"
+                #This is a sanity check. 
+                #Samples are all finished, so we can't loop, just calculate the metric.
 
             #This is for metrics which are calculated per iteration. 
 
@@ -975,6 +981,35 @@ class Trainer:
             return [(name, param) for (name, param) in self.network.named_parameters() if param.requires_grad]
         elif self.network_architecture == 'nnInteractiveUNet':
             return self.network.parameters()
+        elif self.network_architecture == 'nnInteractiveUNetTrainConv':
+            #we split the params into different groups.
+            #We have to take a hacky approach here, to save time, as the naming convention in nnu-net blocks
+            #are a bit cumbersome to deal with using the name of the module alone. 
+            groups = {
+                'conv_encoder': ['conv', 'stem'],      # conv AND stem
+                'conv_decoder': ['seg_layers']         # only seg_layers
+                }
+            result = {}
+            for group_name, substrings in groups.items():
+                result[group_name] = []
+                for name, param in self.network.named_parameters():
+                    if not param.requires_grad:
+                        continue
+                        
+                    # Filter 1: Check if all required substrings are in the name
+                    if not all(substr in name for substr in substrings):
+                        continue
+                        
+                    # Filter 2: Check the module type matches the group
+                    module_name = name.rsplit('.', 1)[0]
+                    module = self.network.get_submodule(module_name)
+                    
+                    # Only Conv3d for conv_* groups
+                    if 'conv' in group_name and isinstance(module, nn.Conv3d):
+                        result[group_name].append((name, param))
+
+            return result
+        
         elif self.network_architecture == 'nnInteractiveUNetTrainConvNorm':
             #we split the params into different groups.
             #We have to take a hacky approach here, to save time, as the naming convention in nnu-net blocks
