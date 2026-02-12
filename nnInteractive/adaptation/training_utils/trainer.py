@@ -6,7 +6,7 @@
 #good luck im rooting for you always thank you although it should be fine, she's just another phd student although shes ridiculously smart b
 #but yeah should be fine. well you get a bit anxious for team meeting presentations so yea just trying to be supportive, thank you thank you i appreciate it. okay have fun with work see ya laterz. ;) see ya 
 
-# wait what, take care of yourself and stay warm :) ty, will do. gym tomorrow? yeah im sleeping like  ababy tonig hlegs?l, hmm if you are i can yeah i am but nws if u want to do smth else. its either pull or legs for me aite see u there 7:30 sharp. lets see if the trains are running first :'(l)o'ololol aint shit funny hahahahha  !!!!!!! dude i was telling my cousin i was trying to move for that exact reason like 2 mins before i found out tdhat they were cancelled damn the universe is telling u to get out of hillingdon FR, gonn start looking this weekend.nice lmk if u need help im good at that stuff, do you have a good vibe check for houses hugely kk ty aite c ya send pics!! oki take care nyeee byebye
+# wait what, take care of yourself and stay warm :) ty, will do. gym tomorrow? yeah im sleeping like  ababy tonig hlegs?l, hmm if you are i can yeah i am but nws if u want to do smth else. its either pull or legs for me aite see u there 7:30 sharp. lets see if the trains are running first :'(l)o'ololol aint shit funny hahahahha  !!!!!!! dude i was telling my cousin i was trying to move for that exact reason like 2 mins before i found out tdhat they were cancelled damn the universe is telling u to get out of [REDACTED] FR, gonn start looking this weekend.nice lmk if u need help im good at that stuff, do you have a good vibe check for houses hugely kk ty aite c ya send pics!! oki take care nyeee byebye
 
 
 
@@ -59,7 +59,7 @@ class Trainer:
         for name, value in value_dict.items():
                 self.tensorboard_writer.add_scalar(
                     name, value, step
-                    )
+                )
     def forward_train(self, input_image, input_prompts, input_prompts_lbs, prev_pred = None, initialise=False, propagated_preds=None):
         self.network.train()
         input = self.construct_input(
@@ -1129,9 +1129,10 @@ class Trainer:
             final_params.update(optimiser_conf.get('dummy_params'))
         else:
             optimiser_params['params']= params_to_optimise #Yes, different meaning of params here..., sorry.
-            final_params = copy.deepcopy(optimiser_params)
-            del optimiser_params['params'] #We remove the original params key to avoid confusion, we have moved the trainable params into the final params dict now.
-            torch.cuda.empty_cache() #This is getting a bit annoying.......
+            final_params = optimiser_params
+            # final_params = copy.deepcopy(optimiser_params)
+            # del optimiser_params['params'] #We remove the original params key to avoid confusion, we have moved the trainable params into the final params dict now.
+            # torch.cuda.empty_cache() #This is getting a bit annoying.......
         self.optimiser = optimiser_factory(
                 final_params #optimiser_params
             )

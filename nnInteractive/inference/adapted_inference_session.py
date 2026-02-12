@@ -930,7 +930,7 @@ class nnInteractiveInferenceSession():
                 {
                 'input_encoding': init_configs['input_encoding'],
                 'model_architecture': init_configs['model_architecture'],
-                'infer_handling_configs': input_handling_configs,
+                'input_handling_configs': input_handling_configs,
                 'network_configuration': init_configs['network_configuration'],
                 'checkpoint_path': checkpoint_path,
             }

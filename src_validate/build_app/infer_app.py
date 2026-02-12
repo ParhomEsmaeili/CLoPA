@@ -53,6 +53,8 @@ class InferApp:
         adaptation_config_name: str, 
         algorithm_state: dict = {},
         enable_adaptation: bool = False,
+        execute_on_adapted: bool = False,
+        episode_number: int | None = None,
         algo_cache_name: str = ''):
 
         self.infer_device = infer_device
@@ -61,8 +63,9 @@ class InferApp:
 
         self.algorithm_state = algorithm_state 
         self.adaptation_config_name = adaptation_config_name
-        
-        if self.algorithm_state == {} and not enable_adaptation:
+        self.enable_adaptation = enable_adaptation
+        self.execute_on_adapted = execute_on_adapted
+        if self.algorithm_state == {} and not self.enable_adaptation and not self.execute_on_adapted:
             #In this case, there is no prior state to load nor are we adapting, we are just using the pretrained model. 
             #NOTE: This is just the zero-shot model.... so take that information into account.
             autoseg_infer = False #This is a variable for storing the action taken in the instance where there is no prompting information provided in a slice.
@@ -80,8 +83,25 @@ class InferApp:
                 'permitted_prompts': permitted_prompts,
                 'prompt_subtypes': prompt_subtypes
             }
-            self.dataset_info = None #No prior loaded dataset info for zero-shot inference. 
-        elif (self.algorithm_state == {} or self.algorithm_state =={'meta_algorithm_state':{'algo_cache_name': algo_cache_name}}) and enable_adaptation:
+            self.dataset_info = None #No prior loaded dataset info for zero-shot inference.
+        elif (self.algorithm_state != {} and 
+              self.algorithm_state != {'meta_algorithm_state':{'algo_cache_name': algo_cache_name}}) and not self.enable_adaptation and self.execute_on_adapted:
+            #In this case, there is a prior state to load, but we are not adapting further. This means we are in an inference-only scenario but with a previously adapted model.
+            self.algo_cache_name = algo_cache_name
+            experiment_subdir =  self.algo_cache_name
+            self.experiment_dir = os.path.join(app_local_path, 'experiment_storage', experiment_subdir)
+            assert os.path.exists(self.experiment_dir), 'The experiment directory for the provided algorithm state does not exist on disk! Cannot proceed with loading!'
+            self.execute_on_adapted = execute_on_adapted
+            assert episode_number is not None, 'An episode number must be provided for executing on an adapted model! Please provide one and try again!'
+            self.episode_number = episode_number
+            self.potential_folds = self.algorithm_state.get('algorithm_training_state').get('checkpoints').keys()
+
+            self.app_params = self.algorithm_state.get('meta_algorithm_state').get('app_params')
+            self.dataset_info = self.algorithm_state.get('meta_algorithm_state').get('dataset_info')
+            assert self.app_params is not None, 'The provided algorithm state did not contain app parameters information! Cannot proceed with loading!'
+            assert self.dataset_info is not None, 'The provided algorithm state did not contain dataset information! Cannot proceed with loading!'
+
+        elif (self.algorithm_state == {} or self.algorithm_state =={'meta_algorithm_state':{'algo_cache_name': algo_cache_name}}) and self.enable_adaptation and not self.execute_on_adapted:
             #In this case, we are going to be saving algorithm states. But there is no prior state to load 
             #or we early-exited before we could even save the initial checkpoint pre-evaluation.
             
@@ -218,7 +238,8 @@ class InferApp:
                 'algorithm_training_state': self.algorithm_training_state
             }
 
-        elif (self.algorithm_state != {} and self.algorithm_state != {'meta_algorithm_state':{'algo_cache_name': algo_cache_name}}) and enable_adaptation:
+        elif (self.algorithm_state != {} and 
+              self.algorithm_state != {'meta_algorithm_state':{'algo_cache_name': algo_cache_name}}) and self.enable_adaptation and not self.execute_on_adapted:
             #Algo state exists, is not empty, and we are adapting further.
             if not type(self.algorithm_state) == dict:
                 raise TypeError('The provided algorithm state must be a dictionary if adaptation is to be enabled!')
@@ -417,7 +438,7 @@ class InferApp:
                 use_fold=0,
                 checkpoint_name='checkpoint_final.pth'
             )
-        elif self.algorithm_state != {}:
+        elif self.algorithm_state != {} and not self.execute_on_adapted and self.enable_adaptation:
             #In this case, we are definitely in some adaptation scenario, but maybe we don't have an updated algorithm. 
             session = AdaptednnInteractiveSession(
                 device=torch.device('cuda', 0),
@@ -473,6 +494,30 @@ class InferApp:
                 
             else:
                 raise Exception('Unknown configuration of algorithm adaptation state! Cannot proceed with loading!') 
+        
+        elif self.algorithm_state != {} and self.execute_on_adapted and not self.enable_adaptation:
+            #In this case we are executing on a previously adapted model, but not adapting further. So we will just load the adapted checkpoint.
+            session = AdaptednnInteractiveSession(
+                device=torch.device('cuda', 0),
+                use_torch_compile=False,
+                verbose=False,
+                torch_n_threads=os.cpu_count(),
+                do_autozoom=True,
+                use_pinned_memory=True
+            )
+            ckpt_dir = os.path.join(self.experiment_dir, 'adaptation_completion_dir', f'adaptation_{self.episode_number}')
+            if ckpt_dir == None or not os.path.exists(ckpt_dir):
+                raise Exception('The chosen checkpoint for loading the adapted model does not exist! Cannot proceed with loading!')
+            self.potential_folds = [f'completed_{fold}' for fold in self.potential_folds if fold in os.listdir(ckpt_dir) or f'completed_{fold}' in os.listdir(ckpt_dir)]
+
+            if len(self.potential_folds) != 1:
+                raise Exception('The checkpoint directory for loading the adapted model does not contain exactly one valid fold! Cannot proceed with loading!' \
+                'We currently do not have anything to help us pick a specific fold, so we require that there is only one valid fold in the checkpoint directory!')
+            ckpt = os.path.join(ckpt_dir, self.potential_folds[0], 'best.pth')
+            assert os.path.exists(ckpt), 'The best checkpoint file for loading the adapted model does not exist! Cannot proceed with loading!'
+            app_params = session.load_from_adapted_model_folder(
+                checkpoint_path=ckpt
+            ) 
         else:
             raise Exception('Unknown configuration of algorithm adaptation state! Cannot proceed with loading!')
         
@@ -481,26 +526,26 @@ class InferApp:
         #Lets update the app_params with the new info from the loaded session. 
         self.app_params.update(app_params)
     
-    def reload_after_adapt(self, checkpoints, best_ckpt_name):
-        #Function for reloading the inference session after adaptation has been performed.
-        session = AdaptednnInteractiveSession(
-                device=torch.device('cuda', 0),
-                use_torch_compile=False,
-                verbose=False,
-                torch_n_threads=os.cpu_count(),
-                do_autozoom=True,
-                use_pinned_memory=True
-            )    
-        #In this case, we have adapted before, so we will load from the adapted checkpoint. 
-        chosen_ckpt = checkpoints.get(best_ckpt_name) 
-        app_params = session.load_from_adapted_model_folder(
-            checkpoint_path=chosen_ckpt
-        )
+    # def reload_after_adapt(self, checkpoints, best_ckpt_name):
+    #     #Function for reloading the inference session after adaptation has been performed.
+    #     session = AdaptednnInteractiveSession(
+    #             device=torch.device('cuda', 0),
+    #             use_torch_compile=False,
+    #             verbose=False,
+    #             torch_n_threads=os.cpu_count(),
+    #             do_autozoom=True,
+    #             use_pinned_memory=True
+    #         )    
+    #     #In this case, we have adapted before, so we will load from the adapted checkpoint. 
+    #     chosen_ckpt = checkpoints.get(best_ckpt_name) 
+    #     app_params = session.load_from_adapted_model_folder(
+    #         checkpoint_path=chosen_ckpt
+    #     )
 
-        self.session = session #We will try to keep the overall API as similar as possible to the pretrained case, 
-        #so we can reuse code. 
-        #Lets update the app_params with the new info from the loaded session. 
-        self.app_params.update(app_params)
+    #     self.session = session #We will try to keep the overall API as similar as possible to the pretrained case, 
+    #     #so we can reuse code. 
+    #     #Lets update the app_params with the new info from the loaded session. 
+    #     self.app_params.update(app_params)
 
 
     def extract_registry_config(self, path, name):
@@ -985,9 +1030,14 @@ class InferApp:
             if not os.path.exists(checkpoint_path):
                 raise Exception('The checkpoint path for the best checkpoint does not exist on disk! Cannot proceed with reloading session after adaptation!')
             
-            session.load_from_adapted_model_folder(
+            app_params = session.load_from_adapted_model_folder(
                 checkpoint_path=self.checkpoints.get(self.best_ckpt_name)
             )
+            #NEW: We now store that updated app params in the meta algorithm state, so that it can be passed through for planning purposes.
+            #BUT NOTE BELOW:
+            self.app_params.update(
+                app_params) #Functionally should not make a diff as the app params are currently not 
+            #changing for inference. the only thing that was changing was the model checkpoint. 
             self.session = session 
             
         else:
