@@ -764,9 +764,11 @@ class InferApp:
         if self.dataset_info is None:
             self.dataset_info = request['dataset_info']
         else:
-            if self.dataset_info != request['dataset_info']:
-                raise Exception('The dataset info provided in the request does not match the dataset info stored in the algorithm state! Cannot proceed with inference!')
-        
+            if self.execute_on_adapted:
+                if any(self.dataset_info[key] != request['dataset_info'][key] for key in self.dataset_info.keys() if key != 'num_samples'):
+                    raise Exception('The dataset info provided in the request does not match the dataset info stored in the algorithm state! Cannot proceed with inference!')
+            else:
+                if self.dataset_info != request['dataset_info']: raise Exception('The dataset info provided in the request does not match the dataset info stored in the algorithm state! Cannot proceed with inference!')        
         if len(self.dataset_info['task_channels']) != 1:
             raise Exception('The inference app only supports single channel images for segmentation.')
         
