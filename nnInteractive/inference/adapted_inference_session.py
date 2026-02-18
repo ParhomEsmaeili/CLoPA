@@ -898,8 +898,8 @@ class nnInteractiveInferenceSession():
                     'lasso': None,
                     'sequentiality': {
                         'interaction_decay': self.interaction_decay,
-                    },
-                },
+                    }
+                }
         network_factory = network_registry[init_configs['model_architecture']]
         network_builder_class = network_factory(
             {'existing_kwargs': None, 'current_kwargs': init_configs['network_configuration']}
