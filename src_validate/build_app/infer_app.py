@@ -515,6 +515,13 @@ class InferApp:
                 'We currently do not have anything to help us pick a specific fold, so we require that there is only one valid fold in the checkpoint directory!')
             ckpt = os.path.join(ckpt_dir, self.potential_folds[0], 'best.pth')
             assert os.path.exists(ckpt), 'The best checkpoint file for loading the adapted model does not exist! Cannot proceed with loading!'
+            
+            #Algo state derived checkpoint will be used to cross-check #NOTE: This should be the standard
+            #going forward!
+            #pull the key for the checkpoint.
+            model_key = self.algorithm_state['algorithm_training_state']['best_ckpt_name']
+            assert f'completed_{model_key}' in self.potential_folds, 'The best checkpoint name stored in the provided algorithm state is not a valid key in the potential folds for loading the adapted model! Cannot proceed with loading!'
+            assert ckpt == self.algorithm_state['algorithm_training_state']['checkpoints'][model_key], 'There was a discrepancy between the checkpoint path stored as the best checkpoint, and the hard-coded mechanism for pulling the best checkpoint'
             app_params = session.load_from_adapted_model_folder(
                 checkpoint_path=ckpt
             ) 
