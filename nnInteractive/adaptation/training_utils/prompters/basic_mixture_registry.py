@@ -15,15 +15,15 @@ class RandomAgent:
             self, 
             args: dict):
         self.sim_device = args.get("sim_device")
-        self.configs_labels_dict = args.get("config_labels_dict")
+        self.semantic_id_dict = args.get("semantic_id_dict")
         self.use_mem = args.get("use_mem")
         heur_fn_dict = args.get("heur_fn_dict")
         build_args = args.get("build_args") #Args for configuring the heuristics
         mixtures_args = args.get("mixture_args") #Args for configuring the mixtures
 
-        if len(self.configs_labels_dict) != 2:
+        if len(self.semantic_id_dict) != 2:
             raise ValueError("The basic random agent prompter only supports binary segmentation tasks. \n"
-                             "Please ensure the configs_labels_dict provided contains exactly two entries.")
+                             "Please ensure the semantic_id_dict provided contains exactly two entries.")
         if self.sim_device.type != 'cuda':
             raise ValueError("The basic random agent prompter currently only supports CUDA devices. \n"
                              "Please provide a CUDA device.")
@@ -339,7 +339,7 @@ class RandomAgent:
             assert batch_size == pred.shape[0]
             assert gt.shape == pred.shape 
 
-        sampling_regions_dict = dict.fromkeys(self.configs_labels_dict.keys(), None)
+        sampling_regions_dict = dict.fromkeys(self.semantic_id_dict.keys(), None)
 
         if not isinstance(gt, torch.Tensor) and not isinstance(gt, MetaTensor):
             raise Exception('The ground truth must be a torch tensor or a metatensor.')
@@ -360,7 +360,7 @@ class RandomAgent:
             #In this case, we only have the gt to work with, no prior pred.
             #We then split the gt, by class for each class. 
             accum = None
-            for label, value  in self.configs_labels_dict.items():
+            for label, value  in self.semantic_id_dict.items():
                 #We split gt by label. 
                 if not (gt == value).sum(): #0 evaluates to bool False.
                     sampling_regions_dict[label] = None #It may be the case that we get a fully single class patch! 
@@ -406,7 +406,7 @@ class RandomAgent:
             error_map_bool = pred != gt #We want it in bool format to minimise memory usage! Same memory usage as int8 though.
             
             accum = None
-            for l1, v1 in self.configs_labels_dict.items():
+            for l1, v1 in self.semantic_id_dict.items():
                 if not (error_map_bool & (gt == v1)).sum():
                     sampling_regions_dict[l1] = None 
                 else: 
@@ -482,7 +482,7 @@ class RandomAgent:
         
         #First we invert the dictionary, and then use that to generate a CBHWD tensor so that we can vectorise
         #prompt generation as much as possible. 
-        inverted_dict = dict(zip(self.configs_labels_dict.values(), self.configs_labels_dict.keys()))
+        inverted_dict = dict(zip(self.semantic_id_dict.values(), self.semantic_id_dict.keys()))
         #Here we will completely bypass any looping through class, inter-prompt and intra-prompt levels as they are not supported.
         #and so we will directly pass through to the heuristic function level.
         for prompt_type in self.valid_ptypes:

@@ -118,7 +118,7 @@ class AdaptationExecutor:
         adaptation_plans: Dict[str, Dict[str, Any]],
         checkpoints: Dict[str, str],
         adaptation_number: int,
-        configs_labels_dict: Dict[str, int] 
+        semantic_id_dict: Dict[str, int] 
         ) -> dict:
         """Invoke the configured callback with the provided plans.
         The same plans are used across all dataloaders provided (splits), that is the current assumption. 
@@ -134,7 +134,7 @@ class AdaptationExecutor:
         to be fixed across all splits.
         checkpoints: Dict[str, str]: dictionary mapping split names to checkpoint paths to resume from.
         adaptation_number: int: integer indicating the current adaptation iteration number.
-        configs_labels_dict: Dict[str, int]: dictionary mapping class configuration labels to integers.
+        semantic_id_dict: Dict[str, int]: dictionary mapping class configuration labels to integers.
         """
         if adaptation_plans is None or adaptation_plans == {}:
             raise RuntimeError("No adaptation plans provided to executor.")
@@ -261,7 +261,7 @@ class AdaptationExecutor:
                 self._callback(
                     logger=self.logger,
                     tensorboard_writer=tensorboard_writer,
-                    configs_labels_dict= configs_labels_dict,
+                    semantic_id_dict= semantic_id_dict,
                     tmp_dir=os.path.join(self.training_tmp_dir, f'adaptation_{adaptation_number}', split_name),
                     split_name=split_name,
                     resume=resume,

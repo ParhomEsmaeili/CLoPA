@@ -70,9 +70,9 @@ def reduction_duplicate(size_average, reduce, reduction):
 class DiceCrossEntropyLoss:
     def __init__(self, **kwargs):
         self.name = 'DiceCrossEntropyLoss'
-        self.configs_labels_dict = kwargs.get('configs_labels_dict')
-        if self.configs_labels_dict == None:
-            raise RuntimeError('configs_labels_dict parameter must be provided for DiceCrossEntropyLoss')
+        self.semantic_id_dict = kwargs.get('semantic_id_dict')
+        if self.semantic_id_dict == None:
+            raise RuntimeError('semantic_id_dict parameter must be provided for DiceCrossEntropyLoss')
         
         
         #Next part is going to look weird, we have to make a workaround cuda determinism issues with the cross
@@ -206,7 +206,7 @@ class DiceCrossEntropyLoss:
         assert output.shape[2:] == target.shape[2:], "Output and target must have the same spatial shape"
         #we also assume a BCHWD shape for calculating losses. 
         assert output.ndim == 5
-        assert output.shape[1] == len(self.configs_labels_dict) #We need the output logits to have 
+        assert output.shape[1] == len(self.semantic_id_dict) #We need the output logits to have 
         #the same number of channels as the number of labels we are predicting.
         
         if not target.shape[1] == 1:

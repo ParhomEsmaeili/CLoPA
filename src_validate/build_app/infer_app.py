@@ -27,7 +27,7 @@ adaptation_config_registry_path = os.path.join(app_local_path, 'nnInteractive', 
 meta_algo_state_keys = {
     'algo_cache_name',
     'adaptation_config',
-    'dataset_info',
+    'dataset_level_schema',
     'experiment_dir',
     'memory_buffer_dir',
     'memory_buffer_disk',
@@ -40,7 +40,7 @@ meta_algo_state_keys = {
     'app_params',
     'write_state',
     'adaptation_number',
-    'configs_labels_dict'
+    'semantic_id_dict'
 }
 
 training_state_keys = {
@@ -50,6 +50,7 @@ training_state_keys = {
 class InferApp:
     def __init__(self, 
         infer_device, 
+        dataset_level_schema: dict,
         adaptation_config_name: str, 
         algorithm_state: dict = {},
         enable_adaptation: bool = False,
@@ -65,6 +66,14 @@ class InferApp:
         self.adaptation_config_name = adaptation_config_name
         self.enable_adaptation = enable_adaptation
         self.execute_on_adapted = execute_on_adapted
+        
+
+        
+        self.semantic_id_dict = dataset_level_schema.get('segmentation_task_schema').get('semantic_id_dict')
+        if self.semantic_id_dict is None:
+            raise ValueError('The provided dataset level schema did not contain a semantic id dictionary under the key path \n'
+                             '"segmentation_task_schema" -> "semantic_id_dict"! Cannot proceed with loading!')
+        
         if self.algorithm_state == {} and not self.enable_adaptation and not self.execute_on_adapted:
             #In this case, there is no prior state to load nor are we adapting, we are just using the pretrained model. 
             #NOTE: This is just the zero-shot model.... so take that information into account.
@@ -83,7 +92,7 @@ class InferApp:
                 'permitted_prompts': permitted_prompts,
                 'prompt_subtypes': prompt_subtypes
             }
-            self.dataset_info = None #No prior loaded dataset info for zero-shot inference.
+            self.dataset_level_schema = dataset_level_schema #No prior loaded dataset info for zero-shot inference.
         elif (self.algorithm_state != {} and 
               self.algorithm_state != {'meta_algorithm_state':{'algo_cache_name': algo_cache_name}}) and not self.enable_adaptation and self.execute_on_adapted:
             #In this case, there is a prior state to load, but we are not adapting further. This means we are in an inference-only scenario but with a previously adapted model.
@@ -97,9 +106,20 @@ class InferApp:
             self.potential_folds = self.algorithm_state.get('algorithm_training_state').get('checkpoints').keys()
 
             self.app_params = self.algorithm_state.get('meta_algorithm_state').get('app_params')
-            self.dataset_info = self.algorithm_state.get('meta_algorithm_state').get('dataset_info')
+            # self.dataset_level_schema = self.algorithm_state.get('meta_algorithm_state').get('dataset_level_schema')
+            self.dataset_level_schema = dataset_level_schema #We will use the provided dataset level schema.
+            self.adaptation_dataset_level_schema = self.algorithm_state.get('meta_algorithm_state').get('dataset_level_schema')
+            #We will create a variable for the dataset level schema which was stored in the algorithm
+            # state, if perhaps later we want to use it for something.             
             assert self.app_params is not None, 'The provided algorithm state did not contain app parameters information! Cannot proceed with loading!'
-            assert self.dataset_info is not None, 'The provided algorithm state did not contain dataset information! Cannot proceed with loading!'
+            assert self.dataset_level_schema is not None, 'The provided algorithm state did not contain dataset level schema information! Cannot proceed with loading!'
+            assert self.adaptation_dataset_level_schema is not None, 'The provided algorithm state did not contain dataset level schema information, something must have gone wrong in the adaptation process! Cannot proceed with loading!'
+            # assert self.dataset_level_schema == dataset_level_schema, 'The dataset level schema in the provided algorithm state does not match the provided dataset level schema for this experiment! Cannot proceed with loading!'
+           
+            #NOTE: We do not assert that the dataset level schema matches the one stored in the meta
+            #algorithm state because this sub-loop is only intended for executing on a previously 
+            #adapted model. Thus, the schema may be different (even if just the number of samples!).
+            #Otherwise we would not be able to even perform cross-task analyses later...
 
         elif (self.algorithm_state == {} or self.algorithm_state =={'meta_algorithm_state':{'algo_cache_name': algo_cache_name}}) and self.enable_adaptation and not self.execute_on_adapted:
             #In this case, we are going to be saving algorithm states. But there is no prior state to load 
@@ -147,7 +167,7 @@ class InferApp:
 
             #Initialising some variables for tracking the adaptation process.
             self.adaptation_config = adaptation_config
-            self.dataset_info = None #We will set this when we load the first sample for adaptation.
+            self.dataset_level_schema = dataset_level_schema #We will set this when we load the first sample for adaptation.
             self.experiment_dir = experiment_dir
             self.samples_memory_buffer_dir = memory_buffer_dir #A directory for storing the samples saved on disk for adaptation purposes.
             self.samples_memory_buffer_disk = dict() #A dictionary for storing the filepaths of the samples saved on disk for adaptation purposes.
@@ -156,6 +176,7 @@ class InferApp:
             
 
             #The next few parameters are usually only configured if adaptation has been triggered at least once.
+
             self.data_split = dict() #A dictionary for storing the data split info for adaptation purposes.
             self.unassigned_samples = [] #A list for storing samples which have been saved to disk but not yet
             # assigned to a data split.#samples, starts with Nonetype.
@@ -175,7 +196,8 @@ class InferApp:
             self.meta_algorithm_state = {
                 'algo_cache_name': algo_cache_name,
                 'adaptation_config': adaptation_config,
-                'dataset_info': self.dataset_info,
+                'dataset_level_schema': self.dataset_level_schema,
+                'semantic_id_dict': self.semantic_id_dict,
                 'experiment_dir': self.experiment_dir, 
                 'memory_buffer_dir': self.samples_memory_buffer_dir,
                 'memory_buffer_disk': self.samples_memory_buffer_disk,
@@ -280,14 +302,26 @@ class InferApp:
                 else:
                     self.adaptation_config = self.meta_algorithm_state.get('adaptation_config')
             
-            #Loading variables which are required for all adaptation scenarios.
+            #Loading variables which are required all scenarios in general, adaptation or not:
+            self.dataset_level_schema = self.meta_algorithm_state.get('dataset_level_schema')
+            if self.dataset_level_schema is None:
+                raise Exception('The provided algorithm state did not contain dataset level data schema information! Cannot proceed with loading!')
+            assert self.dataset_level_schema == dataset_level_schema, 'The dataset level data schema in the provided algorithm state does not match the provided dataset level data schema for this experiment! Cannot proceed with loading!'
+            #Here we will be asserting that the schema variables provided at init must match
+            #the loaded schema as we are performing adaptation on the same task for now!
+            semantic_id_dict_pull = self.meta_algorithm_state.get('semantic_id_dict')
+            if semantic_id_dict_pull is None:
+                raise Exception('The provided algorithm state did not contain a semantic id dictionary! Cannot proceed with loading!')
+            assert semantic_id_dict_pull == self.semantic_id_dict, 'The semantic id dictionary in the provided algorithm state does not match the one in the provided dataset level schema! Cannot proceed with loading!'
+
+            
+            #Loading variables which are required for all adaptation scenarios, we must have successfully been able to
+            #initialise the configuration/procedure for adaptation by this point hence why it is being loaded. If we
+            #had exited before, we would be in the other sub-loop where it must start fresh. 
             self.trigger_criterion_config = self.meta_algorithm_state.get('trigger_criterion_config')
             if self.trigger_criterion_config is None:
                 raise Exception('The provided algorithm state did not contain an adaptation trigger criterion configuration! Cannot proceed with loading!')
 
-            self.dataset_info = self.meta_algorithm_state.get('dataset_info')
-            if self.dataset_info is None:
-                raise Exception('The provided algorithm state did not contain dataset information! Cannot proceed with loading!')
             self.experiment_dir = self.meta_algorithm_state.get('experiment_dir')
             if self.experiment_dir is None:
                 raise Exception('The provided algorithm state did not contain an experiment directory! Cannot proceed with loading!')
@@ -513,15 +547,20 @@ class InferApp:
             if len(self.potential_folds) != 1:
                 raise Exception('The checkpoint directory for loading the adapted model does not contain exactly one valid fold! Cannot proceed with loading!' \
                 'We currently do not have anything to help us pick a specific fold, so we require that there is only one valid fold in the checkpoint directory!')
+            
+            #NOTE: We had intended to pull the checkpoint from the algorithm state directly, but
+            #given that the current implementation does not permit storing the best checkpoint path
+            #for each adaptation episode (e.g. auto-restart training etc), there are a lot of moving
+            #parts to make this adjustment now. Hence, we will temporarily leave the hard-coded implementation
+            #in place.
+
             ckpt = os.path.join(ckpt_dir, self.potential_folds[0], 'best.pth')
             assert os.path.exists(ckpt), 'The best checkpoint file for loading the adapted model does not exist! Cannot proceed with loading!'
             
-            #Algo state derived checkpoint will be used to cross-check #NOTE: This should be the standard
-            #going forward!
             #pull the key for the checkpoint.
-            model_key = self.algorithm_state['algorithm_training_state']['best_ckpt_name']
-            assert f'completed_{model_key}' in self.potential_folds, 'The best checkpoint name stored in the provided algorithm state is not a valid key in the potential folds for loading the adapted model! Cannot proceed with loading!'
-            assert ckpt == self.algorithm_state['algorithm_training_state']['checkpoints'][model_key], 'There was a discrepancy between the checkpoint path stored as the best checkpoint, and the hard-coded mechanism for pulling the best checkpoint'
+            # model_key = self.algorithm_state['algorithm_training_state']['best_ckpt_name']
+            # assert f'completed_{model_key}' in self.potential_folds, 'The best checkpoint name stored in the provided algorithm state is not a valid key in the potential folds for loading the adapted model! Cannot proceed with loading!'
+            # assert ckpt == self.algorithm_state['algorithm_training_state']['checkpoints'][model_key], 'There was a discrepancy between the checkpoint path stored as the best checkpoint, and the hard-coded mechanism for pulling the best checkpoint'
             app_params = session.load_from_adapted_model_folder(
                 checkpoint_path=ckpt
             ) 
@@ -645,8 +684,8 @@ class InferApp:
             points_lbs = p_dict[1][provided_ptypes[0] + '_labels']
 
             #Placing the background points first, then the foreground points.
-            bg_code = self.configs_labels_dict['background']
-            fg_code = self.configs_labels_dict[[k for k in self.configs_labels_dict.keys() if k != 'background'][0]]
+            bg_code = self.semantic_id_dict['background']
+            fg_code = self.semantic_id_dict[[k for k in self.semantic_id_dict.keys() if k != 'background'][0]]
 
             if bg_code != 0:
                 raise Exception('Script written assuming background is assigned class 0! Cannot proceed with inference!')
@@ -715,7 +754,7 @@ class InferApp:
                 raise Exception('More than two class labels were provided bounding box prompts OR bbox label was outside of the [0,1] range! Cannot proceed with interactive inference!') 
             
             #First we will look at the background class, then the foreground class, because we want the center of the last interaction to be the foreground class.
-            bg_code = self.configs_labels_dict['background']
+            bg_code = self.semantic_id_dict['background']
             
             if bg_code != 0:
                 raise Exception('Script written assuming background is assigned class 0! Cannot proceed with inference!')
@@ -729,7 +768,7 @@ class InferApp:
                     include_interaction=False,
                     run_prediction=False
                 )
-            fg_code = self.configs_labels_dict[[k for k in self.configs_labels_dict.keys() if k != 'background'][0]]
+            fg_code = self.semantic_id_dict[[k for k in self.semantic_id_dict.keys() if k != 'background'][0]]
             if fg_code in bboxes_lbs:
                 fg_idx = (torch.cat(bboxes_lbs) == fg_code).nonzero(as_tuple=True)
                 if len(fg_idx[0]) > 1:
@@ -768,16 +807,16 @@ class InferApp:
 
 
     def binary_subject_prep(self, request:dict):
-        if self.dataset_info is None:
-            self.dataset_info = request['dataset_info']
+        if self.dataset_level_schema is None:
+            raise Exception('The dataset level schema must have been set during initialisation!')
         else:
-            if self.execute_on_adapted:
-                if any(self.dataset_info[key] != request['dataset_info'][key] for key in self.dataset_info.keys() if key != 'num_samples'):
-                    raise Exception('The dataset info provided in the request does not match the dataset info stored in the algorithm state! Cannot proceed with inference!')
-            else:
-                if self.dataset_info != request['dataset_info']: raise Exception('The dataset info provided in the request does not match the dataset info stored in the algorithm state! Cannot proceed with inference!')        
-        if len(self.dataset_info['task_channels']) != 1:
+            if self.dataset_level_schema['data_schema']['task_channels'] != request['sample_level_schema']['data_schema']['task_channels']:
+                raise Exception('The task channels provided in the sample level schema do not match the ones specified in the dataset level schema! Cannot proceed with inference!')
+        if len(request['sample_level_schema']['data_schema']['task_channels']) != 1:
             raise Exception('The inference app only supports single channel images for segmentation.')
+        
+        if request['sample_level_schema']['segmentation_task_schema']['semantic_id_dict'] != self.semantic_id_dict:
+            raise Exception('The semantic id dict provided in the sample level schema does not match the one stored in the algorithm state! Cannot proceed with inference!')
         
         if request['infer_mode'] == 'IS_interactive_edit':
             is_state = request['i_state']
@@ -791,7 +830,7 @@ class InferApp:
                 raise Exception('Cannot be an interactive request without interactive inputs.')
 
             init = True
-            self.configs_labels_dict = request['config_labels_dict']
+            # self.semantic_id_dict = request['semantic_id_dict']
             self.load_new_image(request['image']['metatensor'])
             self.session.reset_interactions()
             # self.prev_pred = None  We don't need this. The buffer is already reset.
@@ -874,27 +913,29 @@ class InferApp:
     def trigger_adaptation(self):
         '''
         This is a function which run the adaptation process using the stored samples in the memory buffer.  
-        ''' 
-        
-        #First, lets update the dataset info. For now, we will assume that this CANNOT change, in line with the
-        #inference code itself. 
-        if self.dataset_info is None:
-            raise ValueError('The dataset info in the algorithm state cannot be None when triggering adaptation! Must have been assigned by now. \n' 
+        '''  
+        if self.dataset_level_schema is None:
+            raise ValueError('The dataset level schema stored in the algorithm state cannot be None when triggering adaptation! Must have been assigned by now. \n' 
                              'Cannot proceed with adaptation!')
         else:
-            if self.meta_algorithm_state.get('dataset_info') == None:
-                self.meta_algorithm_state['dataset_info'] = self.dataset_info
-            elif self.dataset_info != self.meta_algorithm_state.get('dataset_info'):
-                raise ValueError('The dataset info in the algorithm state does not match the one in the meta-algorithm state! \n'
+            if self.meta_algorithm_state.get('dataset_level_schema') == None:
+                raise ValueError('The dataset level schema in the algorithm state CANNOT be a nonetype, as this is a '
+                'variable which must be set at app initialisation! Cannot proceed with adaptation!')
+            elif self.dataset_level_schema != self.meta_algorithm_state.get('dataset_level_schema'):
+                raise ValueError('The dataset level schema in the algorithm state does not match the one in the meta-algorithm state! \n'
                                  'Cannot proceed with adaptation!')
             else:
-                pass #They are the same, so no action needed, only put here for clarity. 
-            
-            if self.meta_algorithm_state.get('configs_labels_dict') == None:
-                self.meta_algorithm_state['configs_labels_dict'] = self.configs_labels_dict
-            elif self.configs_labels_dict != self.meta_algorithm_state.get('configs_labels_dict'):
+                pass #They are the same, so no action needed, only put here for clarity.
+
+        if self.semantic_id_dict == None:
+            raise ValueError('The semantic id dict stored in the algorithm state cannot be None when triggering adaptation! Must have been assigned by now. \n' 
+                             'Cannot proceed with adaptation!')
+        else:
+            if self.meta_algorithm_state.get('semantic_id_dict') == None:
+                raise ValueError('The semantic id dict in the algorithm state CANNOT be a nonetype, as this is a variable which must be set at app initialisation! Cannot proceed with adaptation!')
+            elif self.semantic_id_dict != self.meta_algorithm_state.get('semantic_id_dict'):
                 raise ValueError('The config labels dict in the algorithm state does not match the one in the meta-algorithm state! \n'
-                                 'Cannot proceed with adaptation!')
+                                    'Cannot proceed with adaptation!')
             else:
                 pass #They are the same, so no action needed, only put here for clarity.
 
@@ -980,7 +1021,7 @@ class InferApp:
                 adaptation_plans=self.adaptation_plans,
                 checkpoints=self.checkpoints,
                 adaptation_number=self.adaptation_number,
-                configs_labels_dict=self.configs_labels_dict
+                semantic_id_dict=self.semantic_id_dict
             )
             #Updating adaptation dependent info.
             self.checkpoints.update(training_state['checkpoints'])
@@ -1064,7 +1105,7 @@ class InferApp:
         meta_algorithm_state = {
             'algo_cache_name': self.algo_cache_name,
             'adaptation_config': self.adaptation_config,
-            'dataset_info': self.dataset_info,
+            'dataset_level_schema': self.dataset_level_schema,
             'experiment_dir': self.experiment_dir,
             'memory_buffer_dir': self.samples_memory_buffer_dir,
             'memory_buffer_disk': self.samples_memory_buffer_disk,
@@ -1077,7 +1118,7 @@ class InferApp:
             'app_params': self.app_params,
             'write_state': self.write_state,
             'adaptation_number': self.adaptation_number,
-            'configs_labels_dict': self.configs_labels_dict
+            'semantic_id_dict': self.semantic_id_dict
             }
         assert all([meta_algorithm_state[i] == self.meta_algorithm_state[i] for i in meta_algo_state_keys]), 'The meta algorithm state being updated does not match the stored meta algorithm state! Cannot proceed with updating algorithm state info!'
         algorithm_training_state = {
@@ -1097,9 +1138,19 @@ class InferApp:
     
     def __call__(self, request:dict):
 
-        if len(request['config_labels_dict']) == 2:
+        #Let us extract the sample level schema's semantic id dict.
+        sample_level_schema = request.get('sample_level_schema', None)
+        if sample_level_schema == None:
+            raise Exception('The sample level schema must be provided in the inference request! Cannot proceed with inference!')
+        if sample_level_schema.get('segmentation_task_schema') == None:
+            raise Exception('The segmentation task schema must be provided in the sample level schema of the inference request! Cannot proceed with inference!')
+        if sample_level_schema['segmentation_task_schema'].get('semantic_id_dict') == None:
+            raise Exception('The semantic id dict must be provided in the segmentation task schema of the sample level schema of the inference request! Cannot proceed with inference!')
+        sample_level_semantic_id_dict = sample_level_schema['segmentation_task_schema']['semantic_id_dict']
+
+        if len(sample_level_semantic_id_dict) == 2:
             class_type = 'binary'
-        elif len(request['config_labels_dict']) > 2:
+        elif len(sample_level_semantic_id_dict) > 2:
             class_type = 'multi'
             raise NotImplementedError('See the SegFM implementation for integrating multi-class segmentation interpretation.')
         else:
@@ -1110,8 +1161,12 @@ class InferApp:
 
         app = self.infer_apps[modif_request['infer_mode']][f'{class_type}_predict']
 
-        #Setting the configs label dictionary for this inference request.
-        self.configs_labels_dict = modif_request['config_labels_dict']
+        #Setting the semantic id dictionary for this inference request.
+        if self.semantic_id_dict == None:
+            raise Exception('The semantic id dict should have been set at app initialisation!')
+        else:
+            if self.semantic_id_dict != sample_level_semantic_id_dict:
+                raise Exception('The semantic id dict provided in the request does not match the one stored in the algorithm state! Cannot proceed with inference!')
 
 
         pred, probs_tensor, affine = app(request=modif_request)
@@ -1149,68 +1204,3 @@ class InferApp:
 
         return output
 
-
-# if __name__ == '__main__':
-   
-#     infer_app = InferApp(
-#         infer_device=torch.device('cuda', index=0)
-#         )
-
-#     infer_app.app_configs()
-
-#     from monai.transforms import LoadImaged, Orientationd, EnsureChannelFirstd, Compose 
-#     import nibabel as nib 
-
-#     input_dict = {
-#         'image' :os.path.join(app_local_path, 'debug_image/BraTS2021_00266.nii.gz')
-#         }    
-#     load_and_transf = Compose([LoadImaged(keys=['image'], image_only=True), EnsureChannelFirstd(keys=['image']), Orientationd(keys=['image'], axcodes='RAS')])
-
-#     loaded_im = load_and_transf(input_dict)
-#     input_metatensor = torch.from_numpy(loaded_im['image'].array)
-#     meta = {
-#         'original_affine': copy.deepcopy(torch.from_numpy(loaded_im['image'].meta['original_affine']).to(dtype=torch.float64)), 
-#         'affine': copy.deepcopy(loaded_im['image'].meta['affine']).to(dtype=torch.float64)}
-    
-#     request = {
-#         'image':{
-#             'metatensor': input_metatensor,
-#             'meta_dict':meta
-#         },
-#         # 'infer_mode':'IS_interactive_edit',
-#         'infer_mode': 'IS_interactive_init',
-#         'config_labels_dict':{'background':0, 'tumor':1},
-#         'dataset_info':{
-#             'dataset_name':'BraTS2021_t2',
-#             'dataset_image_channels': {            
-#                 "T2w": "0"
-#             },
-#             'task_channels': ["T2w"]
-#         },
-#         'i_state':
-#             {
-#             'interaction_torch_format': {
-#                 'interactions': {
-#                     'points': None, #[torch.tensor([[40, 103, 43]]), torch.tensor([[61, 62, 39]])], #None 
-#                     'scribbles': None, 
-#                     'bboxes': [torch.Tensor([[56,30,17, 92, 76, 51]]).to(dtype=torch.int64)] #None 
-#                     },
-#                 'interactions_labels': {
-#                     'points_labels': None, # [torch.tensor([0]), torch.tensor([1])], #None,
-#                     'scribbles_labels': None, 
-#                     'bboxes_labels': [torch.Tensor([1]).to(dtype=torch.int64)] #None
-#                     }
-#                 },
-#             'interaction_dict_format': {
-#                 'points': None, 
-#                 # {
-#                     # 'background': [[40, 103, 43]],
-#                     # 'tumor': [[61,62,39]]
-#                     #},  
-#                 'scribbles': None,
-#                 'bboxes': {'background': [], 'tumor': [[56,30,17, 92, 76, 51]]} #None
-#                 },    
-#         },
-#     }
-#     output = infer_app(request)
-#     print('halt')

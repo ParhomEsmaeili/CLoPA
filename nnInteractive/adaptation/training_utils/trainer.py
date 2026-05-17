@@ -277,7 +277,7 @@ class Trainer:
                     vals = metric_fn(
                         output.argmax(axis=1).unsqueeze(axis=1), 
                         gt.to(device=self.device),
-                        self.configs_labels_dict
+                        self.semantic_id_dict
                         )
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
@@ -359,7 +359,7 @@ class Trainer:
                             vals = metric_fn(
                                 output.argmax(axis=1).unsqueeze(axis=1), 
                                 gt.to(device=self.device),
-                                self.configs_labels_dict
+                                self.semantic_id_dict
                                 )
                             #Now lets distribute them into a batch separated dict. 
                             for current, orig in propagated_preds.items():
@@ -401,7 +401,7 @@ class Trainer:
                     vals = metric_fn(
                         batchwise_final_pred, 
                         batch_data['label'].to(device=self.device), #Calc with the original gt!
-                        self.configs_labels_dict
+                        self.semantic_id_dict
                         )
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
@@ -599,7 +599,7 @@ class Trainer:
                     vals = metric_fn(
                         output.argmax(axis=1).unsqueeze(axis=1), 
                         gt.to(device=self.device),
-                        self.configs_labels_dict
+                        self.semantic_id_dict
                         )
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
@@ -660,7 +660,7 @@ class Trainer:
                             vals = metric_fn(
                                 output.argmax(axis=1).unsqueeze(axis=1), 
                                 gt.to(device=self.device),
-                                self.configs_labels_dict
+                                self.semantic_id_dict
                                 )
                             #Now lets distribute them into a batch separated dict. 
                             for current, orig in propagated_preds.items():
@@ -700,7 +700,7 @@ class Trainer:
                     vals = metric_fn(
                         batchwise_final_pred, 
                         batch_data['label'].to(device=self.device), #Calc with the original gt!
-                        self.configs_labels_dict
+                        self.semantic_id_dict
                         ).cpu()
                     #Now lets distribute them into a batch separated dict. 
                     for idx in range(vals.shape[0]):
@@ -972,10 +972,21 @@ class Trainer:
         self.logger.info("Trainable model setup complete.")
 
     def extract_trainable_params(self):
+        supported_architectures = [
+            'nnInteractiveUNetFrozenDebugging', 
+            'nnInteractiveUNetTrainNorm', 
+            'nnInteractiveUNet', 
+            'nnInteractiveUNetTrainConv', 
+            'nnInteractiveUNetTrainConvNorm'
+        ]
+        if self.network_architecture not in supported_architectures:
+            raise RuntimeError(f"Network architecture {self.network_architecture} not supported for extracting trainable params! Supported architectures are {supported_architectures}.")
+        
         #For now, lets put a dummy where it will just return all the network parameters.
+        #Now we assert that the architecture name is in the registry also. This is a sanity check, as we should have already failed if the architecture was not in the registry when we tried to build the network.
         if self.network_architecture not in network_registry.keys():
             raise RuntimeError(f"Network architecture {self.network_architecture} not found in network registry, so can't be used for extracting trainable params!")
-        elif self.network_architecture == 'nnInteractiveUNetFrozen':
+        elif self.network_architecture == 'nnInteractiveUNetFrozenDebugging':
             return [(name, param) for (name, param) in self.network.named_parameters() if param.requires_grad]
         elif self.network_architecture == 'nnInteractiveUNetTrainNorm':
             return [(name, param) for (name, param) in self.network.named_parameters() if param.requires_grad]
@@ -1193,7 +1204,7 @@ class Trainer:
         loss_kwargs = copy.deepcopy(base_loss_conf.get('params')) #We copy to avoid any in-place edits to the stored plans,
         #otherwise it will flag errors for changes to the plans mid-training despite it only being due to this reason...
         loss_kwargs.update({
-                'configs_labels_dict': self.configs_labels_dict
+                'semantic_id_dict': self.semantic_id_dict
             })
         self.base_loss = base_loss_factory(
             loss_kwargs
@@ -1218,7 +1229,7 @@ class Trainer:
             self.train_prompters = {mode: BuildHeuristic(
                 sim_device=self.device,
                 use_mem=prompter_plans['use_mem'],
-                config_labels_dict=self.configs_labels_dict,
+                semantic_id_dict=self.semantic_id_dict,
                 heuristics=conf['prompter']['methods'],
                 heuristic_params=conf['prompter']['build_params'],
                 heuristic_mixtures=conf['prompter']['mixture_params'],
@@ -1233,7 +1244,7 @@ class Trainer:
             self.val_prompters = {mode: BuildHeuristic(
                 sim_device=self.device,
                 use_mem=prompter_plans['use_mem'],
-                config_labels_dict=self.configs_labels_dict,
+                semantic_id_dict=self.semantic_id_dict,
                 heuristics=conf['prompter']['methods'],
                 heuristic_params=conf['prompter']['build_params'],
                 heuristic_mixtures=conf['prompter']['mixture_params'],
@@ -1312,7 +1323,7 @@ class Trainer:
         self,
         logger,
         tensorboard_writer,
-        configs_labels_dict: Dict[str, int],
+        semantic_id_dict: Dict[str, int],
         tmp_dir: str,
         split_name: str,
         dataloaders: dict[str, Any],
@@ -1322,7 +1333,7 @@ class Trainer:
         self.resume = resume
         self.split_name = split_name
         self.logger = logger
-        self.configs_labels_dict = configs_labels_dict
+        self.semantic_id_dict = semantic_id_dict
         self.tensorboard_writer = tensorboard_writer
 
 

@@ -66,7 +66,7 @@ class DiceMetric:
         assert self.batchwise_agg in [True, False], "batchwise must be a boolean"
         assert self.ignore_empty in [True, False], "ignore_empty must be a boolean"
          
-    def __call__(self, predictions, targets, configs_labels_dict):
+    def __call__(self, predictions, targets, semantic_id_dict):
         # predictions = B X 1 X H X W X D
         # targets = B X 1 X H X W X D
         assert predictions.ndim == targets.ndim, "Predictions and targets must have the same number of dimensions"
@@ -75,7 +75,7 @@ class DiceMetric:
         
       
         #One-hot encode the target, so that it has the same number of channels as the predictions.
-        num_classes = len(configs_labels_dict)
+        num_classes = len(semantic_id_dict)
         predictions = one_hot(predictions, num_classes=num_classes)
         targets = one_hot(targets, num_classes=num_classes)
 

@@ -89,7 +89,7 @@ class AdaptationTriggerCriterionRegistry:
         
         if self.criterion_config.get('name') == 'static_fraction_interval':
             return static_fraction_interval_criterion(
-                meta_algorithm_state['dataset_info']['num_samples'], 
+                meta_algorithm_state['dataset_level_schema']['data_schema']['num_samples'], 
                 meta_algorithm_state['unassigned_samples'],
                 fraction_interval=self.criterion_config.get('fraction')
                 )

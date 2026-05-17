@@ -10,12 +10,12 @@
 # from monai.data import MetaTensor 
 # import re 
 # class BaseMixture:
-#     def __init__(self, sim_device: torch.device, config_labels_dict: dict):
+#     def __init__(self, sim_device: torch.device, semantic_id_dict: dict):
 #         self.supported_prompts = ['points', 'scribbles', 'bboxes', 'lassos']
 #         self.discrete_variables = [i + '_labels' for i in self.supported_prompts] #The labels are discrete variables, 
 #         #the spatial coordinates need not necessarily be discrete. To permit sub-voxel coordinates in future implementations.
 #         self.sim_device = sim_device
-#         self.config_labels_dict = config_labels_dict 
+#         self.semantic_id_dict = semantic_id_dict 
     
 #     def check_config_availability(self, input_configs: dict[dict], prompter_type: str):
 #         '''
@@ -449,11 +449,11 @@
 #             warnings.warn('The gt mask must be placed on the sim device')
 #             gt = gt.to(dtype=torch.int8, device=self.sim_device)
         
-#         sampling_regions_dict['gt'] = dict.fromkeys(self.config_labels_dict.keys(), None)
+#         sampling_regions_dict['gt'] = dict.fromkeys(self.semantic_id_dict.keys(), None)
 
 #         #We then split the gt, by class for each class. 
 #         accum = None
-#         for label, value  in self.config_labels_dict.items():
+#         for label, value  in self.semantic_id_dict.items():
 #             #We split gt by label. 
 #             if not (gt == value).sum(): #0 evaluates to bool False.
 #                 warnings.warn(f'Class {label} was empty in gt.')
@@ -505,7 +505,7 @@
 #             err_regions_dict = dict() 
 
 #             accum = None
-#             for l1, v1 in self.config_labels_dict.items():
+#             for l1, v1 in self.semantic_id_dict.items():
 #                 #Splitting into classes according to gt (i.e. voxels where an error occured and where the gt class exists)                
 #                 # temp_gt = torch.where(gt == v1, 1, 0).to(dtype=torch.int8, device=self.sim_device) #DEPRECATED NOT NEEDED USE OF MEMORY!
 
@@ -655,7 +655,7 @@
 #     '''
 #     def __init__(
 #             self,
-#             config_labels_dict: dict,
+#             semantic_id_dict: dict,
 #             sim_device: torch.device,
 #             heur_fn_dict: dict,
 #             build_args: dict,
@@ -665,7 +665,7 @@
         
 #         super().__init__(
 #             use_mem=use_mem,
-#             config_labels_dict=config_labels_dict,
+#             semantic_id_dict=semantic_id_dict,
 #             sim_device=sim_device,
 #         )
 #         self.heur_fn_dict = heur_fn_dict
@@ -832,7 +832,7 @@
 #                     raise Exception('Cannot have a non-Nonetype for error region item if simulating initialisation.') 
                 
              
-#             for class_lb, class_int in self.config_labels_dict.items():
+#             for class_lb, class_int in self.semantic_id_dict.items():
                 
 #                 #By default, We just iterate through on a class by class basis. 
 

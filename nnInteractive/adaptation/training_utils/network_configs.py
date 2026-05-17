@@ -72,7 +72,11 @@ class nnInteractiveUNet:
         
         return model.to(device=device)
 
-class nnInteractiveUNetFrozen(nnInteractiveUNet):
+class nnInteractiveUNetFrozenDebugging(nnInteractiveUNet):
+    '''
+    This is a dummy debugging class which freezes all but the last named parameter of the network. 
+    This is just for testing the training pipeline, and serves as a template for more complex freezing logic.
+    '''
     def __init__(self, existing_kwargs:dict | None, current_kwargs:dict):
         super().__init__(existing_kwargs=None, current_kwargs=current_kwargs)
         #Existing kwargs are ignored for now because its the same network, just with frozen layers.
@@ -611,7 +615,7 @@ class nnInteractiveUNetConvNorm(nnInteractiveUNet):
     
 network_registry = {
     'nnInteractiveUNet': make_factory(nnInteractiveUNet),
-    'nnInteractiveUNetFrozen': make_factory(nnInteractiveUNetFrozen),
+    'nnInteractiveUNetFrozenDebugging': make_factory(nnInteractiveUNetFrozenDebugging),
     'nnInteractiveUNetTrainNorm': make_factory(nnInteractiveUNetInstanceNorm),
     'nnInteractiveUNetTrainConv': make_factory(nnInteractiveUNetConv),
     'nnInteractiveUNetTrainConvNorm': make_factory(nnInteractiveUNetConvNorm), #This is the same as nnInteractiveUNetInstanceNorm for now, since we are unfreezing both conv and norm layers in that class.

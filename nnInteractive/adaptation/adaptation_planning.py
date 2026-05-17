@@ -72,9 +72,13 @@ class AdaptationPlanner:
             **kwargs
         )
 
-class Prototype_Static_PlannerDebugAug:
-    def __init__(self,
-        planner_config: dict):
+class PlannerDebug:
+    #We are going to assign this as being the same as the static planner with the fixed augmentation. One difference,
+    #however, is that we are going to adjust max_epochs to 2 so that we can test the training pipeline more quickly.
+    def __init__(
+        self,
+        planner_config: dict
+        ):
 
         self.planner_config = planner_config
         
@@ -101,7 +105,7 @@ class Prototype_Static_PlannerDebugAug:
         E.g., max_epochs, etc.
         '''
         epoch_config = {
-            'max_epochs': 10 #hardcoding it for now.
+            'max_epochs': 2 #hardcoding it for now.
         }
         return epoch_config
     
@@ -124,7 +128,7 @@ class Prototype_Static_PlannerDebugAug:
             'input_handling_configs': app_parameters.get('input_handling_configs'),
             'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
             #for now.
-            'model_architecture': 'nnInteractiveUNetFrozen', #'nnInteractiveUNet',
+            'model_architecture': 'nnInteractiveUNetFrozenDebugging', #'nnInteractiveUNet',
             'network_configuration': app_parameters.get('network_configuration'),
             }
         return algo_conf
@@ -280,7 +284,7 @@ class Prototype_Static_PlannerDebugAug:
                 # Conditional scaling augmentation
                 'RandConditionalScaling': {
                     'keys': ['image', 'label'],
-                    'prob': 1, #0.3,
+                    'prob': 1,
                     'async_prob': 0.6,
                     'scale_range_iso': (0.5, 2),
                     'scale_range_aniso': ((0.5, 2), (0.5, 2), (0.5, 2)),
@@ -293,7 +297,7 @@ class Prototype_Static_PlannerDebugAug:
                     'range_x': [-30.0 * math.pi/360, 30.0 * math.pi/360],
                     'range_y': [-30.0 * math.pi/360, 30.0 * math.pi/360],
                     'range_z': [-30.0 * math.pi/360, 30.0 * math.pi/360],
-                    'prob': 1, #0.2,
+                    'prob': 1,
                     'mode': ['bilinear', 'nearest'],
                     'padding_mode': 'zeros',
                     'align_corners': None,
@@ -319,7 +323,7 @@ class Prototype_Static_PlannerDebugAug:
                 },
                 'RandGaussianNoised': {
                     'keys': ['image'],
-                    'prob': 1, #0.15,
+                    'prob': 1,
                     'mean': 0.0,
                     'std': 0.1**0.5,
                     'dtype': torch.float32,
@@ -329,7 +333,7 @@ class Prototype_Static_PlannerDebugAug:
                 },
                 'RandGaussianBlurd': {
                     'keys': ['image'],
-                    'prob': 1, #0.2,
+                    'prob': 1,
                     'sigma_x': (0.5, 1.5),
                     'sigma_y': (0.5, 1.5),
                     'sigma_z': (0.5, 1.5),
@@ -340,7 +344,7 @@ class Prototype_Static_PlannerDebugAug:
                 'RandScaleIntensityd': {
                     'keys': ['image'],
                     'factors': 0.3,
-                    'prob': 1, #0.15,
+                    'prob': 1,
                     'channel_wise': False,
                     'dtype': torch.float32,
                     'allow_missing_keys': False,
@@ -349,7 +353,7 @@ class Prototype_Static_PlannerDebugAug:
                 'RandScaleIntensityClampedd': { #This is the clamped/contrast adjustment.
                     'keys': ['image'],
                     'factors': 0.3,
-                    'prob': 1, #0.15,
+                    'prob': 1,
                     'dtype': torch.float32,
                     'channel_wise': False, #single channel.
                     'allow_missing_keys': False,
@@ -357,17 +361,19 @@ class Prototype_Static_PlannerDebugAug:
                 },
                 'RandSimulateLowResolutiond': {
                     'keys': ['image'],
-                    'prob':1, #0.1, 
+                    'prob':1, #1 
                     'downsample_mode': 'nearest', 
                     'upsample_mode': 'trilinear', 
-                    'zoom_range': (0.5, 1.0), 
+                    'zoom_range': (0.5, 1.0),  #NOTE: in nnunet they have U(1,2) for the s.f. to downsample BY.
+                    #Here we denote the range for which to pick the fraction of the original size to downsample TO.
+                    #Hence (1,2) in nnunet would correspond to (0.5, 1) here.
                     'align_corners': True, 
                     'device': None,
                     'allow_missing_keys': False,
                 },
                 'RandAdjustContrastd': {
                     'keys': ['image'],
-                    'prob': 1, #0.1,
+                    'prob': 1, #1
                     'gamma': (0.7, 1.5),
                     'invert_image': True,
                     'retain_stats': True,
@@ -375,7 +381,7 @@ class Prototype_Static_PlannerDebugAug:
                 },
                 'RandAdjustContrastd': {
                     'keys': ['image'],
-                    'prob': 1, #0.3,
+                    'prob': 1, #1, #0.3,
                     'gamma': (0.7, 1.5),
                     'invert_image': False,
                     'retain_stats': True,
@@ -383,7 +389,7 @@ class Prototype_Static_PlannerDebugAug:
                 },
                 'RandFlipd': {
                     'keys': ['image', 'label'],
-                    'prob': 1, #0.5,
+                    'prob': 1, #1, #0.5,
                     'spatial_axis': [0,1,2],
                     'allow_missing_keys': False,
                     'lazy': True,
@@ -391,7 +397,7 @@ class Prototype_Static_PlannerDebugAug:
                 #Instead of transposing random axes we will just rotate randomly.
                 'RandRotate90d': {
                     'keys': ['image', 'label'],
-                    'prob': 1, #0.5,
+                    'prob': 1, #1, #0.5,
                     'max_k': 3,
                     'spatial_axes': [0,1],
                     'allow_missing_keys': False,
@@ -399,7 +405,7 @@ class Prototype_Static_PlannerDebugAug:
                 },
                 'RandRotate90d': {
                     'keys': ['image', 'label'],
-                    'prob': 1, #0.5,
+                    'prob': 1, #1, #0.5,
                     'max_k': 3,
                     'spatial_axes': [1,2],
                     'allow_missing_keys': False,
@@ -407,7 +413,7 @@ class Prototype_Static_PlannerDebugAug:
                 },
                 'RandRotate90d': {
                     'keys': ['image', 'label'],
-                    'prob': 1, #0.5,
+                    'prob': 1, #1, #0.5,
                     'max_k': 3,
                     'spatial_axes': [0,2],
                     'allow_missing_keys': False,
@@ -416,7 +422,7 @@ class Prototype_Static_PlannerDebugAug:
                 'RandScaleIntensityd': {
                     'keys': ['image'],
                     'factors': [-2,-2],
-                    'prob': 1, #0.1,
+                    'prob': 1, #1, #0.1,
                     'channel_wise': False, #Single channel..
                     'dtype': torch.float32,
                     'allow_missing_keys': False,
@@ -717,7 +723,7 @@ class Prototype_Static_PlannerDebugAug:
         '''
         optimiser_conf = {
             'name': 'adam',
-            'nested': False, #Not nested.
+            'nested': False,
             'params': {
                 'lr': 0.001,
                 'betas': (0.9, 0.999),
@@ -903,7 +909,7 @@ class Prototype_Static_PlannerFixedAug:
             'input_handling_configs': app_parameters.get('input_handling_configs'),
             'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
             #for now.
-            'model_architecture': 'nnInteractiveUNetFrozen', #'nnInteractiveUNet',
+            'model_architecture': 'nnInteractiveUNetFrozenDebugging', #'nnInteractiveUNet',
             'network_configuration': app_parameters.get('network_configuration'),
             }
         return algo_conf
@@ -1632,35 +1638,37 @@ class Prototype_Static_PlannerFixedAug:
             )
         return self.adaptation_plan
     
+#Deprecated planner, the augmentation stack was broken and we created a new class with the fix. Lets explicitly 
+#make this clear and comment out to make it clear that this is deprecated.
 
-class Prototype_Static_PlannerTrainNorm(Prototype_Static_PlannerDebugAug):
-    #NOTE: We messed up so are re-naming for future me.......
-    def __init__(self, planner_config):
-        super().__init__(planner_config) 
+# class Prototype_Static_PlannerTrainNorm(Prototype_Static_PlannerDebugAug):
+#     #NOTE: We messed up so are re-naming for future me.......
+#     def __init__(self, planner_config):
+#         super().__init__(planner_config) 
     
-    def determine_algorithm_config(
-        self,
-        meta_algorithm_state: dict,
-        app_parameters: dict,
-        *args,
-        **kwargs
-        ) -> dict:
-        '''
-        Only thing we are adjusting for this is the model architecture to have trainable norm layers.
-        '''
-        #This pertains to the actual functionalities of the algorithm, which is more general than
-        #just training/validation.
+#     def determine_algorithm_config(
+#         self,
+#         meta_algorithm_state: dict,
+#         app_parameters: dict,
+#         *args,
+#         **kwargs
+#         ) -> dict:
+#         '''
+#         Only thing we are adjusting for this is the model architecture to have trainable norm layers.
+#         '''
+#         #This pertains to the actual functionalities of the algorithm, which is more general than
+#         #just training/validation.
 
-        #NOTE: For now, we are just using the same configuration but trying to make it more efficient
-        algo_conf = {
-            'input_encoding': 'nnInteractiveUNetEncoding',
-            'input_handling_configs': app_parameters.get('input_handling_configs'),
-            'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
-            #for now.
-            'model_architecture': 'nnInteractiveUNetTrainNorm', #'nnInteractiveUNet',
-            'network_configuration': app_parameters.get('network_configuration'),
-            }
-        return algo_conf
+#         #NOTE: For now, we are just using the same configuration but trying to make it more efficient
+#         algo_conf = {
+#             'input_encoding': 'nnInteractiveUNetEncoding',
+#             'input_handling_configs': app_parameters.get('input_handling_configs'),
+#             'functionality_adaptation': None, #We are just adapting an interactive method to be more efficient
+#             #for now.
+#             'model_architecture': 'nnInteractiveUNetTrainNorm', #'nnInteractiveUNet',
+#             'network_configuration': app_parameters.get('network_configuration'),
+#             }
+#         return algo_conf
 
 class ProtoType_Static_PlannerTrainNorm_AmendedAug(Prototype_Static_PlannerFixedAug):
     def __init__(self, planner_config):
@@ -2058,9 +2066,9 @@ class ProtoType_Static_PlannerTrainConvNormHigherLR(Prototype_Static_PlannerTrai
 
         return optimiser_conf 
 planner_registry = {
-    'Prototype_Static_PlannerDebugAug': Prototype_Static_PlannerDebugAug,
+    'Planner_Debug': PlannerDebug,
     'Prototype_Static_PlannerFixedAug': Prototype_Static_PlannerFixedAug,
-    'Prototype_Static_Planner_TrainNorm': Prototype_Static_PlannerTrainNorm,
+    # 'Prototype_Static_Planner_TrainNorm': Prototype_Static_PlannerTrainNorm,
     'Prototype_Static_Planner_TrainNorm_AmendedAug': ProtoType_Static_PlannerTrainNorm_AmendedAug,
     'Prototype_Static_Planner_TrainConv': Prototype_Static_PlannerTrainConv,
     'Prototype_Static_Planner_TrainConvNorm': Prototype_Static_PlannerTrainConvNorm,
