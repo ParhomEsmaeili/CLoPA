@@ -1,15 +1,3 @@
-# i am your ghost hiii ;)  hi :), it sucks being here yeah the office is so empty,  no one from our lab is in also. call me if u feel lonely aite [redacted]] is here so dont want to disturb her, so its not fully empty then ha hano i guess not, im jk, yeah its annoying to not be able to go for a walk yeah also that. will probably leav e early tday. yeah me too, cya later then, bye bye :)  input_image.shape[1], input_image.shape[2], input_image.shape[3], input_image.shape[4]
-#are you going to get that jumper today? yeah i think so, its quite nice. ok cool, see you later then, bye :) lmao the autocomplete is kind of funny. i am not sure about the jumper but maybe yh i
-#shoudl go ahead, i think it's supposed to snow any minute now idk about [redacted]] or wherever u live, im in [redacted] that' s what i meant yes
-#snow day without being around anyone wow thats just perfect. perfect day for some introspective looking out of the window time
-#ive done TOO much of that recently hahahah ok then work!!!! noo :(, send pics if you go get the jumper though okay will do. i have that meeting in an hour so gonna go do some prep.
-#good luck im rooting for you always thank you although it should be fine, she's just another phd student although shes ridiculously smart b
-#but yeah should be fine. well you get a bit anxious for team meeting presentations so yea just trying to be supportive, thank you thank you i appreciate it. okay have fun with work see ya laterz. ;) see ya 
-
-# wait what, take care of yourself and stay warm :) ty, will do. gym tomorrow? yeah im sleeping like  ababy tonig hlegs?l, hmm if you are i can yeah i am but nws if u want to do smth else. its either pull or legs for me aite see u there 7:30 sharp. lets see if the trains are running first :'(l)o'ololol aint shit funny hahahahha  !!!!!!! dude i was telling my cousin i was trying to move for that exact reason like 2 mins before i found out tdhat they were cancelled damn the universe is telling u to get out of [REDACTED] FR, gonn start looking this weekend.nice lmk if u need help im good at that stuff, do you have a good vibe check for houses hugely kk ty aite c ya send pics!! oki take care nyeee byebye
-
-
-
 # This entire codebase.................thanks fabian.
 # https://i.kym-cdn.com/entries/icons/original/000/034/623/Untitled-3.png
 
