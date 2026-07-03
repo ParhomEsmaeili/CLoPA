@@ -135,9 +135,6 @@ class nnInteractiveUNetEncoding:
         torch.Tensor: Updated interaction map with the point added.
         """
         position = tuple(position.squeeze(axis=0).tolist())
-        if not initialise:
-            interaction_map *= self.sequentiality_conf.get('interaction_decay')
-
         ndim = interaction_map.ndim
 
         # Determine the radius for each dimension
@@ -177,7 +174,13 @@ class nnInteractiveUNetEncoding:
                     assert (torch.isin(torch.stack(prompts_lbs_dict[b_idx][f'{ptype}_labels']).unique().cpu(), torch.Tensor([0,1]))).all(), f'Only binary labels (0 and 1) are supported for prompt type {ptype} in nnInteractiveUNetEncoding!'
                     if any([(torch.stack(prompts_lbs_dict[b_idx][f'{ptype}_labels']) == i).sum() > 1 for i in [0,1]]):
                         raise NotImplementedError('At present, nnInteractiveUNetEncoding only supports single prompts per class (fg/bg). Multiple prompts per class are not yet')
-                
+
+                    # Decay this prompt type's channels once per call (matching inference pattern)
+                    if not init_bool:
+                        for label in [0, 1]:
+                            channel_idx = self.interaction_channel_dict[ptype][label]
+                            interaction_channels[b_idx, channel_idx] *= self.sequentiality_conf.get('interaction_decay')
+
                     for p_idx, p in enumerate(prompts_dict[b_idx][ptype]):
                         label = int(prompts_lbs_dict[b_idx][f'{ptype}_labels'][p_idx].cpu())
                         channel_idx = self.interaction_channel_dict[ptype][label]
