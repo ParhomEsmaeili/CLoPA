@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from functools import partial
 from torch.utils.checkpoint import checkpoint 
-from nnInteractive.adaptation.training_utils.general_utils import make_factory 
+from clopa.adaptation.training_utils.general_utils import make_factory 
 
 class CheckpointedModule(nn.Module):
     def __init__(self, module, use_reentrant: bool = False):

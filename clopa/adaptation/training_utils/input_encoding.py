@@ -1,5 +1,5 @@
 from functools import lru_cache
-from nnInteractive.adaptation.training_utils.general_utils import make_factory 
+from clopa.adaptation.training_utils.general_utils import make_factory 
 # from nnInteractive.interaction.point import PointInteraction_stub
 import torch 
 from scipy.ndimage import distance_transform_edt

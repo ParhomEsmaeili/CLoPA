@@ -14,7 +14,7 @@ import math
 from monai.utils.enums import PostFix
 DEFAULT_POST_FIX = PostFix.meta()
 # app_local_path = os.path.abspath(os.path.dirname(os.path.dirname((os.path.dirname(__file__)))))
-from nnInteractive.adaptation.adaptation_trigger_criteria import AdaptationTriggerCriterionRegistry
+from clopa.adaptation.adaptation_trigger_criteria import AdaptationTriggerCriterionRegistry
 
 class AdaptationPlanner:
     def __init__(

@@ -10,7 +10,7 @@ import copy
 import shutil
 import os  
 import sys 
-sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
+
 from pathlib import Path
 from typing import Callable, Sequence
 from copy import deepcopy

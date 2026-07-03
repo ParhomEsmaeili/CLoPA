@@ -1,5 +1,5 @@
-from nnInteractive.adaptation.training_utils.general_utils import make_factory
-from nnInteractive.adaptation.training_utils.loss_configs import compute_tp_fp_fn
+from clopa.adaptation.training_utils.general_utils import make_factory
+from clopa.adaptation.training_utils.loss_configs import compute_tp_fp_fn
 from scipy import integrate
 from monai.networks.utils import one_hot
 import torch 

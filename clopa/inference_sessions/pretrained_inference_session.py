@@ -15,18 +15,15 @@ from torch import nn
 from torch._dynamo import OptimizedModule
 from torch.nn.functional import interpolate
 
-import nnInteractive
-from nnInteractive.interaction.point import PointInteraction_stub
-from nnInteractive.trainer.nnInteractiveTrainer import nnInteractiveTrainer_stub
-from nnInteractive.utils.bboxes import generate_bounding_boxes
-from nnInteractive.utils.crop import crop_and_pad_into_buffer, paste_tensor, pad_cropped, crop_to_valid
-from nnInteractive.utils.erosion_dilation import iterative_3x3_same_padding_pool3d
-from nnInteractive.utils.os_shennanigans import is_linux_kernel_6_11
-from nnInteractive.utils.rounding import round_to_nearest_odd
+import clopa
+from clopa.interaction.point import PointInteraction_stub
+from clopa.trainer.nnInteractiveTrainer import nnInteractiveTrainer_stub
+from clopa.utils.bboxes import generate_bounding_boxes
+from clopa.utils.crop import crop_and_pad_into_buffer, paste_tensor, pad_cropped, crop_to_valid
+from clopa.utils.erosion_dilation import iterative_3x3_same_padding_pool3d
+from clopa.utils.os_shennanigans import is_linux_kernel_6_11
+from clopa.utils.rounding import round_to_nearest_odd
 
-# New imports:
-from nnInteractive.adaptation.training_utils.network_configs import network_registry as network_registry
-from types import SimpleNamespace  
 
 class nnInteractiveInferenceSession():
     def __init__(self,
@@ -733,11 +730,11 @@ class nnInteractiveInferenceSession():
         self.new_interaction_centers.append(roi_center)
         print(f'Added new image interaction: scale {self.new_interaction_zoom_out_factors[-1]}, center {self.new_interaction_centers}')
 
-    def load_from_pretrained_model_folder(self, model_training_output_dir: str,
-            use_fold: Union[int, str] = None,
-            checkpoint_name: str = 'checkpoint_final.pth'):
+    def initialize_from_trained_model_folder(self, model_training_output_dir: str,
+                                             use_fold: Union[int, str] = None,
+                                             checkpoint_name: str = 'checkpoint_final.pth'):
         """
-        This is used when restoring from a trained model folder.
+        This is used when making predictions with a trained model
         """
         # load trainer specific settings
         expected_json_file = join(model_training_output_dir, 'inference_session_class.json')
@@ -785,10 +782,10 @@ class nnInteractiveInferenceSession():
         configuration_manager = plans_manager.get_configuration(configuration_name)
         # restore network
         num_input_channels = determine_num_input_channels(plans_manager, configuration_manager, dataset_json)
-        trainer_class = recursive_find_python_class(join(nnInteractive.__path__[0], "trainer"),
-                                                    trainer_name, 'nnInteractive.trainer')
+        trainer_class = recursive_find_python_class(join(clopa.__path__[0], "trainer"),
+                                                    trainer_name, 'clopa.trainer')
         if trainer_class is None:
-            print(f'Unable to locate trainer class {trainer_name} in nnInteractive.trainer. '
+            print(f'Unable to locate trainer class {trainer_name} in clopa.trainer. '
                                f'Please place it there (in any .py file)!')
             print('Attempting to use default nnInteractiveTrainer_stub. If you encounter errors, this is where you need to look!')
             trainer_class = nnInteractiveTrainer_stub
@@ -801,6 +798,7 @@ class nnInteractiveInferenceSession():
             plans_manager.get_label_manager(dataset_json).num_segmentation_heads,
             enable_deep_supervision=False
         ).to(self.device)
+        network.load_state_dict(parameters)
         num_input_channels += 7 #7 interaction channels, we put it here because downstream adaptation 
         #builds only using kwargs and nothing hardcoded. 
         if plans_manager.get_label_manager(dataset_json).num_segmentation_heads == 1:
@@ -808,8 +806,7 @@ class nnInteractiveInferenceSession():
         else:
             num_output_channels = plans_manager.get_label_manager(dataset_json).num_segmentation_heads 
             raise Exception('This is an unknown scenario for nninteractives default model!')
-        network.load_state_dict(parameters)
-
+        
         self.plans_manager = plans_manager
         self.configuration_manager = configuration_manager
         self.network = network
@@ -821,27 +818,15 @@ class nnInteractiveInferenceSession():
             self.network = torch.compile(self.network)
         
         return \
-                {
-                'model_architecture': 'nnInteractiveUNet',
-                'input_encoding': 'nnInteractiveUNetEncoding',
+            {
                 'input_handling_configs': {
-                    'patch_size': configuration_manager.patch_size,
-                    'num_modalities': len(dataset_json['channel_names']),
+                    'point_interaction_radius': point_interaction_radius,
+                    'point_interaction_use_etd': point_interaction_use_etd,
+                    'preferred_scribble_thickness': self.preferred_scribble_thickness,
                     'pad_mode_data': self.pad_mode_data,
-                    'do_autozoom': self.do_autozoom,
-                    'points':{
-                        'point_interaction_radius': point_interaction_radius,
-                        'point_interaction_use_etd': point_interaction_use_etd,
+                    'interaction_decay': self.interaction_decay,
+                    'do_autozoom': self.do_autozoom
                     },
-                    'scribbles': {
-                        'preferred_scribble_thickness': self.preferred_scribble_thickness,
-                    },
-                    'bbox': None,
-                    'lasso': None,
-                    'sequentiality': {
-                        'interaction_decay': self.interaction_decay,
-                    },
-                },
                 'plans_path': join(model_training_output_dir, 'plans.json'),
                 'checkpoint_path': join(model_training_output_dir, fold_folder, checkpoint_name),
                 'dataset_json_path': join(model_training_output_dir, 'dataset.json'),
@@ -858,86 +843,28 @@ class nnInteractiveInferenceSession():
             }
 
 
-    def load_from_adapted_model_folder(
-            self,
-            checkpoint_path: str):
+    def manual_initialization(self, network: nn.Module, plans_manager: PlansManager,
+                              configuration_manager: ConfigurationManager,
+                              dataset_json: dict, trainer_name: str):
         """
-        This is used when restoring from a checkpoint with full configs stored internally.
+        This is used by the nnUNetTrainer to initialize nnUNetPredictor for the final validation
         """
-        #Loading in the prior configs (i.e. the configs of the last model we have trained).
-        init_configs = torch.load(checkpoint_path, map_location=self.device, weights_only=False)['prior_configs']
-
-        #Loading in the prior configs as init configs ()
-        #Now we will load things here for construction of the session. 
-
-        #NOTE: For now, we will only be assuming that we are adjusting the existing network, not changing 
-        # input processing or anything fancy like that, and for inference the current kwargs are all that are needed! 
-
-        #Only for training dowe need the previous kwargs.
-        if init_configs['input_encoding'] != 'nnInteractiveUNetEncoding':
-            raise NotImplementedError('Only nnInteractiveUNetEncoding is supported in this version!')
-        else:
-            point_interaction_radius = init_configs['input_handling_configs']['points']['point_interaction_radius'] 
-            point_interaction_use_etd = init_configs['input_handling_configs']['points']['point_interaction_use_etd']
-            self.preferred_scribble_thickness = init_configs['input_handling_configs']['scribbles']['preferred_scribble_thickness']
-            self.point_interaction = PointInteraction_stub(
-                point_interaction_radius,
-                point_interaction_use_etd)
-            self.pad_mode_data = init_configs['input_handling_configs']['pad_mode_data']
-            self.interaction_decay = init_configs['input_handling_configs']['sequentiality']['interaction_decay']
-
-            input_handling_configs = {
-                    'patch_size': init_configs['input_handling_configs']['patch_size'],
-                    'num_modalities': init_configs['input_handling_configs']['num_modalities'],
-                    'pad_mode_data': self.pad_mode_data,
-                    'do_autozoom': self.do_autozoom,
-                    'points':{
-                        'point_interaction_radius': point_interaction_radius,
-                        'point_interaction_use_etd': point_interaction_use_etd,
-                    },
-                    'scribbles': {
-                        'preferred_scribble_thickness': self.preferred_scribble_thickness,
-                    },
-                    'bbox': None,
-                    'lasso': None,
-                    'sequentiality': {
-                        'interaction_decay': self.interaction_decay,
-                    }
-                }
-        network_factory = network_registry[init_configs['model_architecture']]
-        network_builder_class = network_factory(
-            {'existing_kwargs': None, 'current_kwargs': init_configs['network_configuration']}
-        )
-        assert network_builder_class != None, "Network builder class is None despite discrepancy in model configs!"
-        assert getattr(network_builder_class, "build_network_architecture") is not None, "Network builder class has no build_network_architecture method!"
-        assert getattr(network_builder_class, "load_weights") is not None, "Network builder class has no load_weights method!"
-            
-        network = network_builder_class.build_network_architecture(device=self.device)
-        network = network_builder_class.load_weights(
-            device=self.device,
-            model=network,
-            network_weights=init_configs['network_weights']
-        )
+        self.plans_manager = plans_manager
+        self.configuration_manager = configuration_manager
+        self.network = network.to(self.device)
+        self.dataset_json = dataset_json
+        self.trainer_name = trainer_name
+        self.label_manager = plans_manager.get_label_manager(dataset_json)
 
         if self.use_torch_compile and not isinstance(self.network, OptimizedModule):
             print('Using torch.compile')
             self.network = torch.compile(self.network)
-        
-        # self.plans_manager = plans_manager #Plans manager is not used outside of this function. 
-        #We need to create a dummy object here which can be used to extract attributes needed in the current implementation.
-        self.configuration_manager = SimpleNamespace(**{
-            'patch_size': init_configs['input_handling_configs']['patch_size']
-        })
-        self.network = network
 
-        return \
-                {
-                'input_encoding': init_configs['input_encoding'],
-                'model_architecture': init_configs['model_architecture'],
-                'input_handling_configs': input_handling_configs,
-                'network_configuration': init_configs['network_configuration'],
-                'checkpoint_path': checkpoint_path,
-            }
+        if not self.use_torch_compile and isinstance(self.network, OptimizedModule):
+            self.network = self.network._orig_mod
+
+        self.network = self.network.to(self.device)
+
 
 def transform_coordinates_noresampling(
         coords_orig: Union[List[int], Tuple[int, ...]],

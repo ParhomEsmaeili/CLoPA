@@ -6,9 +6,7 @@ from math import ceil
 import shutil
 import json 
 # import base64
-app_local_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-sys.path.append(app_local_path)
-from nnInteractive.adaptation.io_operations import WriteImage, ContinualPersistentDataset
+from clopa.adaptation.io_operations import WriteImage, ContinualPersistentDataset
 from monai.transforms import (
     ToDeviced,
     EnsureTyped,
@@ -33,8 +31,8 @@ from monai.transforms import (
     RandScaleIntensityd,
     RandFlipd
 )
-from nnInteractive.adaptation.training_utils.dataloading_augs import RandConditionalScaling, RandScaleIntensityClampedd
-from nnInteractive.adaptation.training_utils.general_utils import make_factory
+from clopa.adaptation.training_utils.dataloading_augs import RandConditionalScaling, RandScaleIntensityClampedd
+from clopa.adaptation.training_utils.general_utils import make_factory
 from torch.utils.data import RandomSampler, Sampler 
 import torch
 import numpy as np

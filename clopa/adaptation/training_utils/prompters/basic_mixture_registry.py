@@ -3,8 +3,8 @@
 
 #Assumed only to be used for binary semantic segmentation tasks, it is much more basic than the more involved mixture registry.
 
-from nnInteractive.adaptation.training_utils.general_utils import make_factory
-from nnInteractive.adaptation.training_utils.prompters.utils import update_binary_mask_freeform
+from clopa.adaptation.training_utils.general_utils import make_factory
+from clopa.adaptation.training_utils.prompters.utils import update_binary_mask_freeform
 import torch
 from monai.data import MetaTensor 
 from typing import Union

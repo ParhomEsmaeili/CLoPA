@@ -2,8 +2,8 @@ import os
 import sys
 # app_local_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 # sys.path.append(app_local_path)
-from nnInteractive.adaptation.training_utils.trainer import Trainer
-from nnInteractive.adaptation.training_utils.saving_utils import save_checkpoint
+from clopa.adaptation.training_utils.trainer import Trainer
+from clopa.adaptation.training_utils.saving_utils import save_checkpoint
 import torch
 import tempfile
 import logging

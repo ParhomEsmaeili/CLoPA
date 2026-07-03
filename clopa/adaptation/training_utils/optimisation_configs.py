@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import (
     ExponentialLR,
 
 )
-from nnInteractive.adaptation.training_utils.general_utils import make_factory
+from clopa.adaptation.training_utils.general_utils import make_factory
 
 optimiser_algo_registry = {
     'adamW': make_factory(AdamW),

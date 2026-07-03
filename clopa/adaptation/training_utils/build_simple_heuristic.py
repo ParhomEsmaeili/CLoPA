@@ -1,11 +1,7 @@
-import os
-from os.path import dirname as up
-import sys
-sys.path.append(up(up(os.path.abspath(__file__))))
-from typing import Union 
 import torch
-from nnInteractive.adaptation.training_utils.prompters.basic_mixture_registry import prompt_mixture_registry
-from nnInteractive.adaptation.training_utils.prompters.heuristic_registry import base_prompter_registry
+from typing import Union 
+from clopa.adaptation.training_utils.prompters.basic_mixture_registry import prompt_mixture_registry
+from clopa.adaptation.training_utils.prompters.heuristic_registry import base_prompter_registry
 
 class BuildHeuristic:
 

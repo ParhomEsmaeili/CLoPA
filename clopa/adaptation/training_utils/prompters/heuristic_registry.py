@@ -1,9 +1,4 @@
-import os
-from os.path import dirname as up
-import sys 
-sys.path.append((up(os.path.abspath(__file__))))
-
-from nnInteractive.adaptation.training_utils.prompters.point import (
+from clopa.adaptation.training_utils.prompters.point import (
     uniform_random as point_uniform_random,
     # center as point_center
 )

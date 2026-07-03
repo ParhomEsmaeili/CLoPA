@@ -1,6 +1,6 @@
 #Utilities for configuring base loss functions and wrappers on them for interactive seg. specific
 # aspects for training.
-from nnInteractive.adaptation.training_utils.general_utils import make_factory 
+from clopa.adaptation.training_utils.general_utils import make_factory 
 from monai.losses import DiceLoss 
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import torch

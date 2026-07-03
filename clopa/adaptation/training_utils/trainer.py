@@ -15,15 +15,15 @@ from typing import Any, Dict
 import shutil 
 from torch.utils.data import RandomSampler
 #Imports for the components needed for training. 
-from nnInteractive.adaptation.training_utils.network_configs import network_registry
-from nnInteractive.adaptation.training_utils.loss_configs import loss_registry
-from nnInteractive.adaptation.training_utils.optimisation_configs import optimiser_algo_registry as optimiser_registry
-from nnInteractive.adaptation.training_utils.optimisation_configs import lr_scheduler_registry 
-from nnInteractive.adaptation.training_utils.metric_configs import metric_registry
-from nnInteractive.adaptation.training_utils.input_encoding import input_encoding_registry 
-from nnInteractive.adaptation.training_utils.build_simple_heuristic import BuildHeuristic  
-from nnInteractive.adaptation.training_utils.saving_utils import save_checkpoint
-from nnInteractive.adaptation.data_handling import IndexedSampler
+from clopa.adaptation.training_utils.network_configs import network_registry
+from clopa.adaptation.training_utils.loss_configs import loss_registry
+from clopa.adaptation.training_utils.optimisation_configs import optimiser_algo_registry as optimiser_registry
+from clopa.adaptation.training_utils.optimisation_configs import lr_scheduler_registry 
+from clopa.adaptation.training_utils.metric_configs import metric_registry
+from clopa.adaptation.training_utils.input_encoding import input_encoding_registry 
+from clopa.adaptation.training_utils.build_simple_heuristic import BuildHeuristic  
+from clopa.adaptation.training_utils.saving_utils import save_checkpoint
+from clopa.adaptation.data_handling import IndexedSampler
 from monai.data import DataLoader 
 class Trainer:
     def __init__(
