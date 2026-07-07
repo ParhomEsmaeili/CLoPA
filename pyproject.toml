@@ -1,0 +1,42 @@
+[project]
+name = "clopa"
+version = "0.1.0"
+description = "CLoPA interactive segmentation inference backend"
+requires-python = ">=3.9"
+dependencies = [
+    "acvl_utils==0.2.3",
+    "batchgenerators==0.25.1",
+    "batchgeneratorsv2==0.3.0",
+    "connected-components-3d==3.26.1",
+    "dicom2nifti==2.6.2",
+    "dynamic_network_architectures==0.3.1",
+    "einops==0.8.1",
+    "fft-conv-pytorch==1.2.0",
+    "itk==5.4.2",
+    "kornia==0.8.2",
+    "matplotlib==3.10.7",
+    "monai==1.4.0",
+    "nibabel==5.3.2",
+    "nnunetv2==2.6.0",
+    "numpy==1.26.4",
+    "opencv-python-headless==4.11.0.86",
+    "pandas==2.3.3",
+    "pydicom==3.0.1",
+    "python-gdcm==3.2.2",
+    "scikit-image==0.25.2",
+    "scikit-learn==1.7.2",
+    "scipy==1.15.3",
+    "seaborn==0.13.2",
+    "SimpleITK==2.5.2",
+    "surface-distance==0.1",
+    "torch==2.6.0",
+    "tqdm==4.67.1",
+    "yacs==0.1.8",
+]
+
+[build-system]
+requires = ["setuptools>=42.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["clopa*"]
