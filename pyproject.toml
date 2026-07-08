@@ -12,7 +12,7 @@ dependencies = [
     "dynamic_network_architectures==0.3.1",
     "einops==0.8.1",
     "fft-conv-pytorch==1.2.0",
-    "itk==5.4.2",
+    "itk==5.4.2.post1",
     "kornia==0.8.2",
     "matplotlib==3.10.7",
     "monai==1.4.0",
