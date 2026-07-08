@@ -22,6 +22,7 @@ pip install torch==2.6.0 torchvision==0.21.0 \
 
 ### Install CLoPA
 
+**Core installation** (standalone inference):
 ```bash
 git clone https://github.com/ParhomEsmaeili/CLoPA.git
 cd CLoPA
@@ -32,6 +33,13 @@ pip install -e .
 # Or using uv (faster)
 uv sync
 ```
+
+**With validation framework dependencies** (scoring, preprocessing, export tools):
+```bash
+pip install -e ".[validate]"
+```
+
+This adds MONAI, scikit-image, SimpleITK, surface-distance, matplotlib, kornia, and opencv-python-headless — needed for running the IS-Validation-Framework pipeline alongside CLoPA.
 
 ## Branches
 
