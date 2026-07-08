@@ -2,9 +2,9 @@
 name = "clopa"
 version = "0.1.0"
 description = "CLoPA interactive segmentation inference backend"
-requires-python = ">=3.9"
+requires-python = "==3.10"
 dependencies = [
-    "is-validate[clopa] @ git+https://github.com/ParhomEsmaeili/IS-Validation-Framework.git",
+    "is-validate[clopa] @ git+https://github.com/ParhomEsmaeili/IS_Validate.git",
     "acvl_utils==0.2.3",
     "batchgeneratorsv2==0.3.0",
     "connected-components-3d==3.26.1",
