@@ -2,7 +2,7 @@
 name = "clopa"
 version = "0.1.0"
 description = "CLoPA interactive segmentation inference backend"
-requires-python = "==3.10"
+requires-python = "==3.10.*"
 dependencies = [
     "acvl_utils==0.2.3",
     "batchgenerators==0.25.1",
