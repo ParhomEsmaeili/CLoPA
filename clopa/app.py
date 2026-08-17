@@ -57,6 +57,7 @@ class InferApp:
         algo_cache_name: str = ''):
 
         self.infer_device = infer_device
+        self.do_autozoom = self.infer_device.type == 'cuda'
 
         self.algorithm_state = algorithm_state 
         self.adaptation_config_name = adaptation_config_name
@@ -532,7 +533,7 @@ class InferApp:
                 use_torch_compile=False,
                 verbose=False,
                 torch_n_threads=os.cpu_count(),
-                do_autozoom=True,
+                do_autozoom=self.do_autozoom,
                 use_pinned_memory=True
             )
             ckpt_dir = os.path.join(self.experiment_dir, 'adaptation_completion_dir', f'adaptation_{self.episode_number}')
