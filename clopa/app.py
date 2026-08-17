@@ -57,8 +57,6 @@ class InferApp:
         algo_cache_name: str = ''):
 
         self.infer_device = infer_device
-        if self.infer_device.type != 'cuda':
-            raise ValueError('This script only should be used with CUDA inference device.')
 
         self.algorithm_state = algorithm_state 
         self.adaptation_config_name = adaptation_config_name
@@ -530,7 +528,7 @@ class InferApp:
         elif self.algorithm_state != {} and self.execute_on_adapted and not self.enable_adaptation:
             #In this case we are executing on a previously adapted model, but not adapting further. So we will just load the adapted checkpoint.
             session = AdaptednnInteractiveSession(
-                device=torch.device('cuda', 0),
+                device=self.infer_device,
                 use_torch_compile=False,
                 verbose=False,
                 torch_n_threads=os.cpu_count(),
@@ -789,7 +787,7 @@ class InferApp:
         self.session._predict()
         pred = self.session.target_buffer.unsqueeze(0) #Adding back the batch dimension..., we don't assume a one-hot format.
         # del session #We don't delete the session here because we want to keep the application online..
-        empty_cache(torch.device('cuda', 0))
+        empty_cache(self.infer_device)
         probs_tensor = torch.zeros([2] + list(self.session.target_buffer.shape), dtype=torch.float32) #This is a dummy..they don't give us this. Also its probably going to be deprecated soon, but has not been yet. So just put a dummy.
 
         return pred, probs_tensor
@@ -799,6 +797,17 @@ class InferApp:
         if self.dataset_level_schema is None:
             raise Exception('The dataset level schema must have been set during initialisation!')
         else:
+            # TODO: this asserts exact equality between dataset-level and sample-level
+            # task_channels, which forces every case to match the dataset-wide
+            # convention exactly. If we ever branch out to genuine multi-channel cases
+            # (some samples missing a modality, or a case's available channels
+            # legitimately diverging from the dataset-level default), this needs to
+            # become a real validation of the sample-level channels against the
+            # dataset-level convention, not a literal-equality check. See matching TODO
+            # at the sample_level_schema construction site in
+            # IS_Validate/src/front_back_interactor/simulation_orchestrator.py's
+            # generate_sample_level_schema(), which currently just echoes the
+            # dataset-level value rather than deriving a genuine per-sample one.
             if self.dataset_level_schema['data_schema']['task_channels'] != request['sample_level_schema']['data_schema']['task_channels']:
                 raise Exception('The task channels provided in the sample level schema do not match the ones specified in the dataset level schema! Cannot proceed with inference!')
         if len(request['sample_level_schema']['data_schema']['task_channels']) != 1:
@@ -823,7 +832,7 @@ class InferApp:
             self.load_new_image(request['image']['metatensor'])
             self.session.reset_interactions()
             # self.prev_pred = None  We don't need this. The buffer is already reset.
-            empty_cache(torch.device('cuda', 0))
+            empty_cache(self.infer_device)
             
         elif request['infer_mode'] == 'IS_autoseg':
             if not self.app_params['autoseg_infer_bool']:
@@ -1163,7 +1172,7 @@ class InferApp:
         pred = pred.to(device='cpu')
         probs_tensor = probs_tensor.to(device='cpu')
         # affine = affine.to(device='cpu')
-        torch.cuda.empty_cache()
+        empty_cache(self.infer_device)
 
         assert probs_tensor.shape[1:] == request['image']['metatensor'].shape[1:]
         assert pred.shape[1:] == request['image']['metatensor'].shape[1:] 
@@ -1188,7 +1197,7 @@ class InferApp:
         del probs_tensor
         del affine
         del modif_request
-        # torch.cuda.empty_cache() 
-        empty_cache(torch.device('cuda', 0))
+        # torch.cuda.empty_cache()
+        empty_cache(self.infer_device)
 
         return output
