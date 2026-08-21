@@ -33,6 +33,10 @@ pip install -e .
 uv sync
 ```
 
+## Architecture
+
+- [Interaction event flow](docs/interaction-event-flow.md) — how a widget interaction becomes an `InferApp` request: `CLoPASession` accumulation, request building, the RAS orientation round-trip.
+
 ## Branches
 
 - **main** — standalone, all dependencies explicit
