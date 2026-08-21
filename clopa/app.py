@@ -1051,8 +1051,17 @@ class InferApp:
             })
         return self.update_algorithm_state_info()
 
+    def close(self):
+        #Tears down the current session before this InferApp is discarded/replaced (e.g. the
+        #napari widget re-initializing on a different episode), so GPU memory is reclaimed
+        #rather than only becoming eligible for reclaim once Python GC collects this object.
+        if self.session is not None:
+            self.session._reset_session()
+            self.session = None
+        empty_cache(self.infer_device)
+
     def update_session_and_app_params(self):
-        #Function which updates the app params after adaptation and resets the session accordingly. 
+        #Function which updates the app params after adaptation and resets the session accordingly.
         
         #First we will reset and remove the existing session if this hasn't already been done.  
         if self.session is not None:
