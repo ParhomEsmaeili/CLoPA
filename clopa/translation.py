@@ -142,6 +142,26 @@ class CLoPASession:
         if 'task_channels' not in props:
             raise ValueError("props must include 'task_channels' (per-case, see export config)")
 
+        # Structurally this method is channel-count-agnostic — it just takes
+        # data.shape[0] as "the channel axis" and tags it with task_channels as
+        # metadata, no per-channel logic below actually branches on the count.
+        # napari-clopa's on_load_image() now assembles a real (C, H, W, D) tensor for
+        # a multi-channel task_channels (stacking per-channel layers, or reading a
+        # channel-first merged file), so this only checks the two agree with each
+        # other — not whether the model/checkpoint downstream was ever trained on
+        # multi-channel input, which this method has never validated for the
+        # single-channel case either and isn't taking on now. (IS_Validate's own
+        # MergeImChannels still raises NotImplementedError for a real multi-channel
+        # merge as of this writing — see data/utils.py — so a merged multi-channel
+        # case can't actually reach here yet regardless.)
+        if data.shape[0] != len(props['task_channels']):
+            raise ValueError(
+                f"data.shape[0]={data.shape[0]} doesn't match "
+                f"len(task_channels)={len(props['task_channels'])} "
+                f"(task_channels={props['task_channels']!r}) — the channel axis and "
+                "its metadata have to agree."
+            )
+
         affine_in = props.get('affine')
         if affine_in is None:
             raise ValueError("props must include 'affine'")
