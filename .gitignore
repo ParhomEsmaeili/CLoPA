@@ -12,3 +12,4 @@ debug_image/large_images/
 plan.md
 .venv/
 uv.lock
+.agent-routing.local.yml
