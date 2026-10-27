@@ -836,7 +836,7 @@ class InferApp:
             if not self.app_params['autoseg_infer_bool']:
                 raise Exception('Autoseg is too OOD for this algorithm (i.e segmentation without any prompts)')
             else:
-                NotImplementedError('We have not yet implemented a mechanism for adaptation into autoseg inference!')
+                raise NotImplementedError('We have not yet implemented a mechanism for adaptation into autoseg inference!')
 
         affine = request['image']['meta_dict']['affine']
 
