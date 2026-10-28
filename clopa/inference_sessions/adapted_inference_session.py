@@ -836,8 +836,8 @@ class nnInteractiveInferenceSession():
                     'scribbles': {
                         'preferred_scribble_thickness': self.preferred_scribble_thickness,
                     },
-                    'bbox': None,
-                    'lasso': None,
+                    'bboxes': None,
+                    'lassos': None,
                     'sequentiality': {
                         'interaction_decay': self.interaction_decay,
                     },
@@ -898,8 +898,8 @@ class nnInteractiveInferenceSession():
                     'scribbles': {
                         'preferred_scribble_thickness': self.preferred_scribble_thickness,
                     },
-                    'bbox': None,
-                    'lasso': None,
+                    'bboxes': None,
+                    'lassos': None,
                     'sequentiality': {
                         'interaction_decay': self.interaction_decay,
                     }
