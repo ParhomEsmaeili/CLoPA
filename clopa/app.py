@@ -663,8 +663,16 @@ class InferApp:
         if not bool(is_state):
             raise Exception('Cannot be an interactive request without interaction state! Should not have reached this point!')
 
-        #Extracting the prompt dictionaries from the interaction state.
-        p_dict = (is_state['interaction_torch_format']['interactions'], is_state['interaction_torch_format']['interactions_labels'])
+        #Extracting the prompt dictionaries from the interaction state. interactions_metadata is a
+        #generic, type-agnostic sibling for per-prompt-type metadata that isn't a class label (e.g.
+        #scribbles_axes/lassos_axes) -- never stuffed into interactions_labels, which provided_ptypes
+        #below assumes contains only <type>_labels keys. .get(..., {}) so older interaction states
+        #missing the key entirely don't KeyError, matching IS_Validate's own defensive pattern.
+        p_dict = (
+            is_state['interaction_torch_format']['interactions'],
+            is_state['interaction_torch_format']['interactions_labels'],
+            is_state['interaction_torch_format'].get('interactions_metadata', {}),
+        )
         #Determine the prompt types from the input prompt dictionaries
         provided_ptypes = list(set([k for k,v in p_dict[0].items() if v is not None]) & set([k[:-7] for k,v in p_dict[1].items() if v is not None]))
         #Lets provide somewhat of a reasonable limitation, which is that more than one prompt type cannot be provided at once.
@@ -708,10 +716,11 @@ class InferApp:
             scribbles = p_dict[0][provided_ptypes[0]]
             scribbles_lbs = p_dict[1][provided_ptypes[0] + '_labels']
             #The axis perpendicular to the plane each scribble was drawn in (one per scribble, in the same order as the labels).
-            #NOTE: Field name/placement as defined in the IS_Validate API: interactions_labels['scribbles_slice_axes'].
-            scribbles_slice_axes = p_dict[1].get(provided_ptypes[0] + '_slice_axes')
-            if scribbles_slice_axes is None:
-                raise Exception('Scribbles must be provided with their slice axes (scribbles_slice_axes)! Cannot proceed with interactive inference!')
+            #Generic lookup, not scribble-specific: interactions_metadata['scribbles_axes'], following the
+            #same '<type>_axes' convention lasso (and any future prompt type needing this) will also use.
+            prompt_axes = p_dict[2].get(provided_ptypes[0] + '_axes')
+            if prompt_axes is None:
+                raise Exception('Scribbles must be provided with their slice axes (scribbles_axes)! Cannot proceed with interactive inference!')
 
             bg_code = self.semantic_id_dict['background']
             if bg_code != 0:
@@ -721,7 +730,7 @@ class InferApp:
             flat_lbs = torch.cat([lb.reshape(-1) for lb in scribbles_lbs])
             if len(scribbles) != flat_lbs.shape[0]:
                 raise Exception('Each scribble must have exactly one label! Cannot proceed with interactive inference!')
-            if len(scribbles_slice_axes) != len(scribbles):
+            if len(prompt_axes) != len(scribbles):
                 raise Exception('Each scribble must have exactly one slice axis! Cannot proceed with interactive inference!')
             if not torch.isin(flat_lbs, torch.tensor([bg_code, fg_code])).all():
                 raise Exception('Scribble labels must be either the background or the (single) foreground class code!')
@@ -734,7 +743,7 @@ class InferApp:
             all_scribble_indices = [(i, False) for i in bg_idx] + [(i, True) for i in fg_idx]
             for j, (idx, include) in enumerate(all_scribble_indices):
                 self.session.add_scribble_interaction(
-                    self.scribble_coords_to_mask(scribbles[idx], int(torch.as_tensor(scribbles_slice_axes[idx]).reshape(-1)[0])),
+                    self.scribble_coords_to_mask(scribbles[idx], int(torch.as_tensor(prompt_axes[idx]).reshape(-1)[0])),
                     include_interaction=include,
                     run_prediction=False,
                     skip_interaction_decay=(j > 0)
