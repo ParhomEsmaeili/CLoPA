@@ -83,7 +83,7 @@ class CLoPASession:
     this class never calls the raw session's prediction methods directly.
     """
 
-    _PROMPT_TYPES = ('points', 'bboxes', 'scribbles', 'lasso')
+    _PROMPT_TYPES = ('points', 'bboxes', 'scribbles', 'lassos')
 
     def __init__(self, infer_app, dataset_level_schema: dict):
         self.app = infer_app
@@ -114,8 +114,8 @@ class CLoPASession:
             'bboxes_labels': [],
             'scribbles': None,
             'scribbles_labels': None,
-            'lasso': None,
-            'lasso_labels': None,
+            'lassos': None,
+            'lassos_labels': None,
         }
 
     def _label_code(self, include_interaction: bool) -> int:
@@ -207,7 +207,7 @@ class CLoPASession:
             'points': 'points' in permitted,
             'bbox2d': 'bboxes' in permitted,
             'scribble': 'scribbles' in permitted,
-            'lasso': 'lasso' in permitted,
+            'lasso': 'lassos' in permitted,
         }
 
     @property
