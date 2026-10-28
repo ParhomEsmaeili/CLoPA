@@ -76,6 +76,16 @@ def remap_point_to_ras(point, ornt: np.ndarray, orig_shape) -> list:
     return [flipped[ax] for ax in axes]
 
 
+def remap_axis_to_ras(axis: int, ornt: np.ndarray) -> int:
+    """Maps an axis *index* (not a coordinate value) from the image's original axis order
+    into its position after reorient_to_ras(). A flip doesn't move an axis, only negates
+    values along it, so this is just the permutation half of remap_point_to_ras(): ornt[axis, 0]
+    is nibabel's own "which output axis does this input axis land on" encoding — equivalent to
+    inverting remap_point_to_ras()'s `axes = argsort(ornt[:, 0])` permutation, which for a
+    permutation array collapses back to ornt[:, 0] itself (argsort(argsort(p)) == p)."""
+    return int(ornt[axis, 0])
+
+
 class CLoPASession:
     """
     Adapter that accumulates napari interactions and translates them into
@@ -100,20 +110,19 @@ class CLoPASession:
         return self.dataset_level_schema['segmentation_task_schema']['semantic_id_dict']
 
     def _reset_accumulator(self):
-        # scribbles/lasso: not implemented yet — add_scribble_interaction() /
-        # add_lasso_interaction() raise NotImplementedError. Event-handling mechanics
-        # (how a single stroke/shape reaches this class) are documented in
-        # napari-clopa/docs/interaction-event-flow.md. Still open: storage shape
-        # (list of full masks vs. progressive merge) and InferApp conversion format
-        # (binary_place_interactions() doesn't support scribbles/lasso yet) — see
-        # plan Step 2c.
+        # lasso: not implemented yet — add_lasso_interaction() raises NotImplementedError.
+        # InferApp.binary_place_interactions() has no lasso handling at all yet, so there's
+        # no target format to convert into (unlike scribbles, see add_scribble_interaction()).
+        # Event-handling mechanics (how a single stroke/shape reaches this class) are
+        # documented in napari-clopa/docs/interaction-event-flow.md.
         self._accumulated = {
             'points': [],
             'points_labels': [],
             'bboxes': [],
             'bboxes_labels': [],
-            'scribbles': None,
-            'scribbles_labels': None,
+            'scribbles': [],
+            'scribbles_labels': [],
+            'scribbles_axes': [],
             'lassos': None,
             'lassos_labels': None,
         }
@@ -299,11 +308,41 @@ class CLoPASession:
         include_interaction: bool,
         run_prediction: bool = True,
     ):
-        raise NotImplementedError(
-            "Scribble interactions are not yet supported — InferApp.binary_place_interactions() "
-            "has no scribble handling, and storage/conversion format is undecided (see plan Step 2c). "
-            "Once a point-set representation is chosen, remap_point_to_ras() applies per point."
+        # One call per finished stroke, same contract as points/bboxes: napari-clopa's
+        # ScribbleLayer.get_last() returns only the just-finished stroke (values reset to a
+        # fresh prompt_index right after), never the layer's accumulated history — so there's
+        # nothing to merge here, just convert this one stroke straight into the point-set +
+        # slice-axis format InferApp already expects (see app.py's scribble_coords_to_mask()
+        # and interactions_metadata['scribbles_axes']) and append it, exactly like a point.
+        self._check_single_prompt_type('scribbles')
+        coords = np.argwhere(scribble_image > 0)
+        if coords.size == 0:
+            raise ValueError("Scribble mask is empty — nothing to place.")
+
+        # The slice axis is the one the stroke is constant along — scribbles are drawn on a
+        # single 2D slice, so exactly one axis (or, degenerately, more than one for a
+        # single-voxel stroke) has a single coordinate value across every scribble voxel.
+        slice_axis_candidates = [
+            ax for ax in range(coords.shape[1]) if np.all(coords[:, ax] == coords[0, ax])
+        ]
+        if not slice_axis_candidates:
+            raise ValueError(
+                "Scribble coordinates are not constant along any axis — can't determine "
+                "which slice the scribble was drawn on."
+            )
+        orig_slice_axis = slice_axis_candidates[0]
+
+        ras_coords = [
+            remap_point_to_ras(pt.tolist(), self._image_meta['ornt'], self._image_meta['orig_shape'])
+            for pt in coords
+        ]
+        self._accumulated['scribbles'].append(ras_coords)
+        self._accumulated['scribbles_labels'].append(self._label_code(include_interaction))
+        self._accumulated['scribbles_axes'].append(
+            remap_axis_to_ras(orig_slice_axis, self._image_meta['ornt'])
         )
+        if run_prediction:
+            self._flush()
 
     def add_lasso_interaction(
         self,
@@ -339,6 +378,7 @@ class CLoPASession:
 
         interactions = {}
         labels = {}
+        metadata = {}
 
         if self._accumulated['points']:
             interactions['points'] = [
@@ -356,9 +396,28 @@ class CLoPASession:
                 torch.tensor([lbl], dtype=torch.int64) for lbl in self._accumulated['bboxes_labels']
             ]
 
-        # scribble and lasso: conversion TBD, format TBD (see plan Step 2c) — once the
-        # API format is finalised, values are placed here following the same
-        # list-of-per-interaction-tensors convention as points/bboxes above
+        if self._accumulated['scribbles']:
+            # Each entry is already one scribble's (N_sp, 3) RAS coordinate list — no extra
+            # leading-list wrap like points/bboxes get, since scribble_coords_to_mask() expects
+            # a plain 2D (N_sp, 3) tensor per scribble, not a (1, 3)/(1, 6)-shaped single prompt.
+            interactions['scribbles'] = [
+                torch.tensor(coords, dtype=torch.float32)
+                for coords in self._accumulated['scribbles']
+            ]
+            labels['scribbles_labels'] = [
+                torch.tensor([lbl], dtype=torch.int64) for lbl in self._accumulated['scribbles_labels']
+            ]
+            # Lives in `metadata` (interactions_metadata) — a generic, type-agnostic sibling
+            # dict for per-type metadata that isn't a class label, not in `labels`
+            # (interactions_labels), which app.py's provided_ptypes detection assumes contains
+            # only <type>_labels keys. Lasso gets the same '<type>_axes' convention here once
+            # it has any backend contract.
+            metadata['scribbles_axes'] = [
+                torch.tensor([axis], dtype=torch.int64)
+                for axis in self._accumulated['scribbles_axes']
+            ]
+
+        # lasso: conversion TBD — InferApp has no lasso handling yet (see add_lasso_interaction()).
 
         return {
             'sample_level_schema': self.sample_level_schema,
@@ -369,6 +428,7 @@ class CLoPASession:
                 'interaction_torch_format': {
                     'interactions': interactions,
                     'interactions_labels': labels,
+                    'interactions_metadata': metadata,
                 },
             },
             'image': {
