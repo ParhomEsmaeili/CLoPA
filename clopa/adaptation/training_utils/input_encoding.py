@@ -58,9 +58,9 @@ class nnInteractiveUNetEncoding:
         
 
         self.point_conf = input_handling_configs.get('points', None)
-        self.box_conf = input_handling_configs.get('bbox', None)
+        self.box_conf = input_handling_configs.get('bboxes', None)
         self.scribble_conf = input_handling_configs.get('scribbles', None)
-        self.lasso_conf = input_handling_configs.get('lasso', None)
+        self.lasso_conf = input_handling_configs.get('lassos', None)
         self.sequentiality_conf = input_handling_configs.get('sequentiality', None) #sequentiality conf refers to how the sequentiality is handled
         
         
