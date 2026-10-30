@@ -5,6 +5,7 @@ import numpy as np
 import nibabel as nib
 from monai.transforms import Orientation
 from monai.data import MetaTensor
+from skimage.morphology import skeletonize
 
 
 def reorient_to_ras(data: np.ndarray, affine: np.ndarray) -> MetaTensor:
@@ -307,6 +308,8 @@ class CLoPASession:
         scribble_image: np.ndarray,
         include_interaction: bool,
         run_prediction: bool = True,
+        *,
+        slice_axis: int,
     ):
         # One call per finished stroke, same contract as points/bboxes: napari-clopa's
         # ScribbleLayer.get_last() returns only the just-finished stroke (values reset to a
@@ -315,32 +318,35 @@ class CLoPASession:
         # slice-axis format InferApp already expects (see app.py's scribble_coords_to_mask()
         # and interactions_metadata['scribbles_axes']) and append it, exactly like a point.
         self._check_single_prompt_type('scribbles')
-        coords = np.argwhere(scribble_image > 0)
-        if coords.size == 0:
+
+        # Reorient the mask original -> RAS once, then everything below is in RAS.
+        ras_mask = nib.orientations.apply_orientation(scribble_image, self._image_meta['ornt'])
+        ras_slice_axis = remap_axis_to_ras(slice_axis, self._image_meta['ornt'])
+        inplane_axes = [a for a in range(ras_mask.ndim) if a != ras_slice_axis]
+
+        # Safety net: the mask must be non-empty and constant along the declared slice axis.
+        slice_indices = np.flatnonzero(ras_mask.any(axis=tuple(inplane_axes)))
+        if slice_indices.size == 0:
             raise ValueError("Scribble mask is empty — nothing to place.")
-
-        # The slice axis is the one the stroke is constant along — scribbles are drawn on a
-        # single 2D slice, so exactly one axis (or, degenerately, more than one for a
-        # single-voxel stroke) has a single coordinate value across every scribble voxel.
-        slice_axis_candidates = [
-            ax for ax in range(coords.shape[1]) if np.all(coords[:, ax] == coords[0, ax])
-        ]
-        if not slice_axis_candidates:
+        if slice_indices.size > 1:
             raise ValueError(
-                "Scribble coordinates are not constant along any axis — can't determine "
-                "which slice the scribble was drawn on."
+                "Scribble coordinates are not constant along the declared slice axis "
+                f"({ras_slice_axis}) — the mask spans multiple slices."
             )
-        orig_slice_axis = slice_axis_candidates[0]
+        slice_index = int(slice_indices[0])
 
-        ras_coords = [
-            remap_point_to_ras(pt.tolist(), self._image_meta['ornt'], self._image_meta['orig_shape'])
-            for pt in coords
-        ]
-        self._accumulated['scribbles'].append(ras_coords)
+        # Skeletonize the in-plane 2D slice to a 1px centerline, then emit its coordinates as
+        # half-spaced float32 (voxel centers, matching the IS_Validate API convention).
+        inplane = np.take(ras_mask, slice_index, axis=ras_slice_axis) > 0
+        coords_2d = np.argwhere(skeletonize(inplane)).astype(np.float32) + 0.5
+
+        ras_coords = np.empty((coords_2d.shape[0], ras_mask.ndim), dtype=np.float32)
+        ras_coords[:, inplane_axes] = coords_2d
+        ras_coords[:, ras_slice_axis] = slice_index + 0.5
+
+        self._accumulated['scribbles'].append(ras_coords.tolist())
         self._accumulated['scribbles_labels'].append(self._label_code(include_interaction))
-        self._accumulated['scribbles_axes'].append(
-            remap_axis_to_ras(orig_slice_axis, self._image_meta['ornt'])
-        )
+        self._accumulated['scribbles_axes'].append(ras_slice_axis)
         if run_prediction:
             self._flush()
 
